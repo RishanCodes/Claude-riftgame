@@ -229,7 +229,7 @@ h1, h2, h3, .head { font-family: var(--head); letter-spacing: 0.04em; margin: 0;
 .abil.cooling { filter: saturate(0.4); }
 
 /* tips */
-.tipbox { position: absolute; left: 50%; bottom: calc(220px + var(--sab)); transform: translateX(-50%); width: min(92%, 380px); z-index: 30; padding: 12px 14px 12px 50px; font-size: 15px; line-height: 1.35; animation: tipin 0.35s cubic-bezier(.2,1.4,.4,1); pointer-events: auto; white-space: pre-line; }
+.tipbox { position: absolute; left: 50%; top: calc(104px + var(--sat)); transform: translateX(-50%); width: min(92%, 380px); z-index: 30; padding: 12px 14px 12px 50px; font-size: 15px; line-height: 1.35; animation: tipin 0.35s cubic-bezier(.2,1.4,.4,1); pointer-events: auto; white-space: pre-line; }
 .tipbox .px-icon { position: absolute; left: 12px; top: 12px; }
 .tipbox .x { position: absolute; right: 8px; top: 6px; color: var(--dim); font-size: 13px; }
 @keyframes tipin { from { opacity: 0; transform: translate(-50%, 20px); } }

@@ -244,7 +244,10 @@ export class Enemy {
     this.sprite.setDepth(100 + this.y);
     this.shadow.setPosition(this.x, this.y + this.r * 0.8);
 
-    if (this.flashT > 0) this.sprite.setTintFill(0xffffff);
+    if (this.flashT > 0) {
+      if (this.isBoss) this.sprite.setTint(0xffc8c8);
+      else this.sprite.setTintFill(0xffffff);
+    }
     else if (this.st.frozen > 0) this.sprite.setTint(0x9feaff);
     else if (this.state === 'windup' && Math.sin(this.stateT * 30) > 0) this.sprite.setTint(0xff8080);
     else if (this.st.chill > 0) this.sprite.setTint(0xc8eaff);

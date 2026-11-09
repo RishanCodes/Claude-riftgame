@@ -19,7 +19,7 @@ export const BOSSES: BossDef[] = [
     title: 'Root of the Hollow',
     biome: 0,
     hp: 2000,
-    dmg: 14,
+    dmg: 12,
     radius: 34,
     phases: [0.5],
     desc: 'The ancient heart-tree of the Hollow, corrupted when the rift opened beneath her roots. She defends her blighted grove with spiraling thorns and grasping roots.',

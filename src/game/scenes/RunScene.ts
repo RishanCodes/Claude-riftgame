@@ -296,6 +296,7 @@ export class RunScene extends Phaser.Scene {
     } else if (t === 'boss') {
       this.roomState = 'fight';
       this.waves = [];
+      this.pendingSpawns++; // keeps the room from counting as cleared before the boss arrives
       this.delay(0.8, () => this.spawnBoss());
     } else {
       this.roomState = 'calm';
@@ -401,7 +402,7 @@ export class RunScene extends Phaser.Scene {
   }
 
   spawnBoss() {
-    console.log('DBG spawnBoss act=' + this.run.act + ' type=' + this.roomType + ' state=' + this.roomState + ' ' + new Error().stack?.split('\n').slice(1, 4).join(' | '));
+    this.pendingSpawns = Math.max(0, this.pendingSpawns - 1);
     const bdef = getBoss(this.biome.boss);
     const b = new Boss(this, bdef, this.W / 2, this.bounds.y + 140, this.run.difficulty());
     b.spawnT = 1.2;

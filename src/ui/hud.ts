@@ -186,6 +186,7 @@ export class Hud {
   show(scene: RunScene) {
     this.root.classList.add('on');
     this.controls.classList.add('on');
+    this.setBoss(null);
     this.mutKey = '';
     this.elKey = '';
     this.joyHint.style.opacity = scene.run.roomsCleared === 0 ? '1' : '0';

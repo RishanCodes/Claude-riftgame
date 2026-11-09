@@ -79,7 +79,7 @@ export const BLESSINGS: BlessingDef[] = [
   { id: 'shockroll', name: 'Thunder Roll', icon: 'burst', rarity: 1, maxLevel: 3, tag: 'mechanic', power: 'shockDodge',
     desc: (l) => `Ending a dodge releases a shockwave dealing ${60 + l * 30}% damage around you.` },
   { id: 'cyclone', name: 'Cyclone Mastery', icon: 'spiral', rarity: 1, maxLevel: 3, tag: 'mechanic', power: 'cyclone',
-    desc: () => `Whirlwind Cleave: +25% radius, +1 extra hit, +20% ability damage.`,
+    desc: () => `Your special covers +25% more area and deals +20% damage (and gains an extra hit, arrow wave or spirit).`,
     mods: () => [{ stat: 'abilityDamage', type: 'pct', v: 0.2 }] },
   { id: 'aegis', name: 'Aegis', icon: 'shield', rarity: 2, maxLevel: 2, tag: 'mechanic', power: 'aegis',
     desc: (l) => `A barrier blocks one hit completely. Recharges every ${l === 1 ? 12 : 8}s.` },

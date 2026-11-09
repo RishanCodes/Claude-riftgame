@@ -2,7 +2,7 @@ import type { Item, Slot, StatMod, Stats, StatKey } from '../core/types';
 import { SLOTS } from '../core/types';
 import { BASE_STATS, getClass } from '../data/classes';
 import { TALENTS } from '../data/meta';
-import { itemAllMods } from '../data/items';
+import { itemAllMods, getBase, rankPowers, starsOf } from '../data/items';
 import { getBlessing } from '../data/blessings';
 import { getMutation, SYNERGIES } from '../data/mutations';
 import type { SaveData } from '../core/save';
@@ -18,7 +18,8 @@ export function equippedItems(save: SaveData): Partial<Record<Slot, Item>> {
   for (const s of SLOTS) {
     const id = save.equipped[s];
     const it = id ? save.inventory.find((i) => i.id === id) : undefined;
-    if (it) out[s] = it;
+    // a weapon only works for its own class
+    if (it && !(s === 'weapon' && getBase(it.base).cls && getBase(it.base).cls !== save.selectedClass)) out[s] = it;
   }
   return out;
 }
@@ -38,6 +39,7 @@ export function collectMods(save: SaveData, run?: RunModsSource): { mods: StatMo
     if (!it) continue;
     mods.push(...itemAllMods(it));
     for (const p of it.powers) addPower(p);
+    for (const p of rankPowers(it.slot, starsOf(it))) addPower(p);
   }
   if (run) {
     for (const [id, lvl] of Object.entries(run.blessings)) {

@@ -223,7 +223,7 @@ export class RunState {
   rollItem(minRarity: Rarity = 0, luckBonus = 0): Item {
     const luck = this.act * 0.8 + (this.tier - 1) * 0.5 + luckBonus;
     const rarity = rollRarity(luck, minRarity);
-    const item = generateItem({ rarity, tier: Math.min(2, this.act + (chance(0.25) ? 1 : 0)) });
+    const item = generateItem({ rarity, tier: Math.min(2, this.act + (chance(0.25) ? 1 : 0)), cls: this.save.selectedClass });
     return item;
   }
 

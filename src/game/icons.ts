@@ -1,5 +1,6 @@
 // Pixel-art UI icons generated at runtime and cached as data URLs.
 import { PixelCanvas } from './pixel';
+import { GEAR } from '../data/gear';
 
 type Draw = (pc: PixelCanvas) => void;
 
@@ -353,6 +354,54 @@ D.map = rows(
   ['............', '.aaa.aaa.aa.', 'abbbacccabba', 'abdbacecabba', 'abbdaccdabba', 'abbbacdcabda', 'abbbacccadba', 'abbbacccabba', '.aaa.aaa.aa.'],
   { a: '#5a4030', b: '#e8d8b0', c: '#d8c8a0', d: '#ff5a3a', e: '#ffffff' },
 );
+
+// ─── RIFTBOUND 2.0 gear icon templates: (pc, main, accent, gem) ───
+type T = (pc: PixelCanvas, a: string, b: string, c: string) => void;
+const shade = (hex: string, k: number) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const f = (v: number) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return '#' + ((f((n >> 16) & 255) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).padStart(6, '0');
+};
+const blade = (pc: PixelCanvas, x0: number, y0: number, x1: number, y1: number, a: string, w: number) => {
+  for (let k = 0; k < w; k++) pc.line(x0 + k, y0, x1 + k, y1, k === 0 ? '#ffffff' : k === w - 1 ? shade(a, 0.6) : a);
+};
+const TPL: Record<string, T> = {
+  sword: (pc, a, b, c) => { blade(pc, 3, 8, 10, 1, a, 2); pc.line(1, 6, 5, 10, b); pc.line(0, 11, 2, 9, shade(b, 0.6)); pc.px(3, 8, c); },
+  longsword: (pc, a, b, c) => { blade(pc, 2, 9, 11, 0, a, 2); pc.line(0, 7, 4, 11, b); pc.px(0, 11, shade(b, 0.6)); pc.px(2, 9, c); },
+  greatsword: (pc, a, b, c) => { blade(pc, 3, 8, 10, 0, a, 3); pc.line(1, 5, 6, 10, b); pc.line(0, 11, 2, 9, shade(b, 0.6)); pc.px(4, 7, c); },
+  sabre: (pc, a, b, c) => { for (let t = 0; t <= 1; t += 0.08) { const x = 3 + t * 8, y = 8 - t * 7 + Math.sin(t * 3) * 1.5; pc.px(x, y, a); pc.px(x + 1, y, '#ffffff'); } pc.line(1, 7, 4, 10, b); pc.px(0, 11, shade(b, 0.6)); pc.px(2, 9, c); },
+  daggers: (pc, a, b, c) => { blade(pc, 2, 7, 6, 2, a, 2); blade(pc, 8, 7, 4, 2, a, 2); pc.line(0, 9, 2, 7, b); pc.line(11, 9, 9, 7, b); pc.px(1, 8, c); pc.px(10, 8, c); },
+  claws: (pc, a, b, c) => { for (let i = 0; i < 3; i++) for (let t = 0; t < 1; t += 0.1) pc.px(3 + i * 3 + t * 3, 9 - t * 8 + Math.sin(t * 3), t > 0.7 ? '#ffffff' : a); pc.rect(2, 9, 9, 2, b); pc.px(6, 10, c); },
+  knives: (pc, a, b, c) => { for (let i = -1; i <= 1; i++) { pc.line(6, 10, 6 + i * 4, 2, a); pc.px(6 + i * 4, 1, '#ffffff'); } pc.rect(5, 9, 3, 3, b); pc.px(6, 10, c); },
+  staff: (pc, a, b, c) => { pc.line(2, 11, 8, 4, a); pc.line(3, 11, 9, 4, shade(a, 0.7)); pc.ball(9.5, 2.5, 2.4, 2.4, c, '#ffffff', b); },
+  wand: (pc, a, b, c) => { pc.line(2, 10, 7, 5, a); pc.line(3, 10, 8, 5, shade(a, 0.7)); pc.line(9, 1, 9, 6, c); pc.line(7, 3, 11, 3, c); pc.px(9, 3, '#ffffff'); pc.px(1, 11, b); },
+  tome: (pc, a, b, c) => { pc.rect(2, 2, 8, 9, a); pc.rect(2, 2, 1, 9, shade(a, 0.6)); pc.rect(3, 10, 7, 1, '#e8e0d0'); pc.rect(4, 4, 5, 1, b); pc.ball(6, 7, 1.6, 1.6, c, '#ffffff', b); },
+  orb: (pc, a, b, c) => { pc.ball(6, 5, 4, 4, a, '#ffffff', shade(a, 0.6), c); pc.line(2, 9, 4, 11, b); pc.line(10, 9, 8, 11, b); pc.rect(4, 10, 5, 1, b); },
+  bow: (pc, a, b, c) => { for (let t = -1; t <= 1; t += 0.06) pc.px(4 + Math.cos(t) * 5 - 2, 6 + t * 5, a); pc.line(2, 1, 2, 11, '#e0e0e0'); pc.px(7, 6, c); pc.rect(6, 5, 1, 3, b); },
+  longbow: (pc, a, b, c) => { for (let t = -1.1; t <= 1.1; t += 0.05) pc.px(3 + Math.cos(t) * 6 - 1, 6 + t * 5.4, a); pc.line(2, 0, 2, 11, '#e0e0e0'); pc.rect(7, 5, 1, 3, b); pc.px(8, 6, c); },
+  recurve: (pc, a, b, c) => { for (let t = -1; t <= 1; t += 0.06) pc.px(4 + Math.cos(t * 1.4) * 4 - Math.abs(t) * 2 + 1, 6 + t * 5, a); pc.line(2, 1, 2, 11, '#e0e0e0'); pc.px(1, 0, c); pc.px(1, 11, c); pc.rect(6, 5, 1, 3, b); },
+  hammer: (pc, a, b, c) => { pc.line(2, 11, 7, 6, b); pc.line(3, 11, 8, 6, shade(b, 0.7)); pc.rect(5, 1, 6, 5, a); pc.rect(5, 1, 6, 1, '#ffffff'); pc.rect(5, 5, 6, 1, shade(a, 0.6)); pc.px(8, 3, c); },
+  mace: (pc, a, b, c) => { pc.line(2, 11, 7, 6, b); pc.ball(8, 4, 3.4, 3.4, a, '#ffffff', shade(a, 0.6)); [[8, 0], [11, 4], [8, 8], [4, 4]].forEach(([x, y]) => pc.px(x, y, c)); },
+  halberd: (pc, a, b, c) => { pc.line(1, 11, 10, 2, b); pc.rect(7, 1, 4, 4, a); pc.px(11, 0, '#ffffff'); pc.line(6, 1, 6, 5, shade(a, 0.6)); pc.px(9, 3, c); },
+  totem: (pc, a, b, c) => { pc.rect(4, 2, 4, 10, a); pc.rect(4, 2, 1, 10, shade(a, 1.3)); pc.px(5, 4, b); pc.px(7, 4, b); pc.rect(5, 6, 2, 1, b); pc.line(2, 2, 4, 3, c); pc.line(10, 2, 8, 3, c); pc.px(6, 0, c); },
+  lantern: (pc, a, b, c) => { pc.line(6, 0, 6, 2, b); pc.rect(3, 2, 6, 1, b); pc.rect(3, 3, 6, 6, a); pc.ball(6, 6, 1.6, 2, c, '#ffffff', a); pc.rect(3, 9, 6, 1, b); pc.rect(3, 3, 1, 6, b); pc.rect(8, 3, 1, 6, b); },
+  idol: (pc, a, b, c) => { pc.ball(6, 4, 3, 3, a, '#ffffff', shade(a, 0.6)); pc.rect(4, 7, 5, 4, a); pc.rect(3, 10, 7, 2, b); pc.px(5, 4, c); pc.px(7, 4, c); pc.px(6, 0, c); },
+  armor: (pc, a, b, c) => rows(['.aa......aa.', 'abba....abba', 'abbbaaaabbba', '.abbbccbbba.', '..abbccbba..', '..abbddbba..', '..abbbbbba..', '..abbccbba..', '..abbbbbba..', '..aaaaaaaa..'], { a: shade(a, 0.5), b: a, c: b, d: c })(pc),
+  robe: (pc, a, b, c) => rows(['....aaaa....', '...abbbba...', '..abbccbba..', '..abbbbbba..', '..abbddbba..', '.abbbbbbbba.', '.abbccccbba.', 'abbbbbbbbbba', 'abbbbbbbbbba', 'aaaaaaaaaaaa'], { a: shade(a, 0.5), b: a, c: b, d: c })(pc),
+  helm: (pc, a, b, c) => rows(['.....dd.....', '....dddd....', '...aaaaaa...', '..abbbbbba..', '.abbbbbbbba.', '.abccccccba.', '.abc....cba.', '.abc....cba.', '.abb....bba.', '..a......a..'], { a: shade(a, 0.5), b: a, c: b, d: c })(pc),
+  hood: (pc, a, b, c) => rows(['....aaaa....', '...abbbba...', '..abbbbbba..', '.abbbccbbba.', '.abbc..cbba.', '.abc....cba.', '.abc.dd.cba.', '.abbc..cbba.', '..abbbbbba..', '...aaaaaa...'], { a: shade(a, 0.5), b: a, c: shade(a, 0.3), d: c })(pc),
+  hat: (pc, a, b, c) => rows(['.......aa...', '......abba..', '.....abba...', '....abbba...', '....abbba...', '...abbcbba..', '...accccca..', 'aaabbbdbbaaa', 'abbbbbbbbbba', '.aaaaaaaaaa.'], { a: shade(a, 0.5), b: a, c: b, d: c })(pc),
+  boots: (pc, a, b, c) => rows(['..aaaa......', '..abba......', '..abba......', '..adda......', '..abbaa.....', '..abbbbaaa..', '.aabbbbbbaa.', '.abbbbbbbbba', '.cccccccccca', '.cc......cc.'], { a: shade(a, 0.5), b: a, c: b, d: c })(pc),
+  ring: (pc, a, _b, c) => { for (let t = 0; t < Math.PI * 2; t += 0.05) pc.px(6 + Math.cos(t) * 4, 7 + Math.sin(t) * 3.5, t > Math.PI ? '#ffffff' : a); pc.ball(6, 2.5, 2.3, 2, c, '#ffffff', shade(c, 0.6)); },
+  amulet: (pc, a, b, c) => { for (let t = 0.2; t < Math.PI - 0.2; t += 0.06) pc.px(6 + Math.cos(t) * 5, 1 + Math.sin(t) * 5, a); pc.ball(6, 8, 3, 3, c, '#ffffff', shade(c, 0.6), b); },
+};
+for (const g of GEAR) {
+  const tpl = TPL[g.icon] ?? TPL.sword;
+  D['g_' + g.id] = (pc) => {
+    tpl(pc, g.colors[0], g.colors[1], g.colors[2]);
+    if (g.rarity === 4) [[0, 0], [11, 1], [1, 11], [11, 10]].forEach(([x, y]) => pc.px(x, y, '#ffb0e0'));
+  };
+}
 
 export function iconCanvas(name: string, scale = 4): HTMLCanvasElement {
   const draw = D[name] ?? D.star;

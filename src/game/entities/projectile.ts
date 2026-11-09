@@ -23,6 +23,8 @@ export interface ProjectileOpts {
   passWalls?: boolean;
   glow?: number;
   source?: 'wave' | 'proj';
+  tint?: number;
+  onHit?: (e: Enemy, pr: Projectile) => void;
 }
 
 export class Projectile {
@@ -46,6 +48,7 @@ export class Projectile {
   sprite: Phaser.GameObjects.Image;
   glow?: Phaser.GameObjects.Image;
   hit = new Set<Enemy>();
+  onHit?: (e: Enemy, pr: Projectile) => void;
   alive = true;
 
   constructor(scene: RunScene, o: ProjectileOpts) {
@@ -68,6 +71,8 @@ export class Projectile {
     this.source = o.source ?? 'proj';
     this.sprite = scene.add.image(o.x, o.y, o.tex).setScale((o.scale ?? 1) * 2).setDepth(1500);
     this.sprite.rotation = o.angle;
+    this.onHit = o.onHit;
+    if (o.tint !== undefined) this.sprite.setTint(o.tint);
     if (o.glow) {
       this.glow = scene.add.image(o.x, o.y, 'fx_glow').setTint(o.glow).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.6).setScale(this.r * 0.09).setDepth(1499);
     }
@@ -76,7 +81,10 @@ export class Projectile {
   update(dt: number) {
     this.life -= dt;
     if (this.life <= 0) return this.destroy();
-    if (this.homing && this.team === 'enemy') {
+    if (this.homing && this.team === 'player') {
+      const t = this.scene.nearestEnemy(this.x, this.y, 220);
+      if (t && !this.hit.has(t)) this.steer(t.x, t.y, dt);
+    } else if (this.homing && this.team === 'enemy') {
       const p = this.scene.player;
       const want = Math.atan2(p.y - this.y, p.x - this.x);
       const cur = Math.atan2(this.vy, this.vx);
@@ -110,6 +118,18 @@ export class Projectile {
         if ((o.x - this.x) ** 2 + (o.y - this.y) ** 2 < (o.r + this.r * 0.5) ** 2) return this.impact();
       }
     }
+  }
+
+  steer(tx: number, ty: number, dt: number) {
+    const want = Math.atan2(ty - this.y, tx - this.x);
+    const cur = Math.atan2(this.vy, this.vx);
+    let d = want - cur;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    const turn = Math.max(-this.homing * dt, Math.min(this.homing * dt, d));
+    const sp = Math.hypot(this.vx, this.vy);
+    this.vx = Math.cos(cur + turn) * sp;
+    this.vy = Math.sin(cur + turn) * sp;
   }
 
   impact() {

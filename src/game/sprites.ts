@@ -673,3 +673,80 @@ def('portal', () => {
   pc.rect(0, 37, 36, 3, '#3a3650');
   return pc.outline();
 });
+
+// ───────────────────────── RIFTBOUND 2.0: class heroes ─────────────────────────
+const LEGS2 = P_LEGS;
+const HEROES: Record<string, { top: string[]; pal: Record<string, string> }> = {
+  swordsman: { top: P_TOP, pal: P_PAL },
+  assassin: {
+    pal: { k: '#2a2440', K: '#3e3460', s: '#e8c0a0', e: '#ff5a6a', r: '#c02a3a', R: '#ff4a5a', a: '#3a3048', g: '#6a5a8a', c: '#1e1830', C: '#120c20', l: '#2a2438', b: '#1a1420', B: '#2a2030' },
+    top: ['..............', '.....kkkk.....', '....kKKKKk....', '...kKKKKKKk...', '...kKseeskk...', '...kKssssKk...', '....rrrrrr....', '..ccrRaaRaa...', '.ccCaaaaaaas..', '.cCCaaggaaas..', '.cC.aaaaaa....', '.cC..agga.....', '.cC..aaaa.....'],
+  },
+  mage: {
+    pal: { h: '#5a3a8a', H: '#3a2068', y: '#ffcf5a', k: '#3a2068', s: '#f2c9a0', e: '#1a1020', w: '#e0d8ff', r: '#6a3ab0', R: '#9a6ad8', c: '#2a1a4a', C: '#1a1030', l: '#3a2a5a', b: '#2a1a10', B: '#4a3020' },
+    top: ['.......h......', '......hhH.....', '.....hhhH.....', '....hhyhhH....', '..yyyyyyyyyy..', '....kseesk....', '....kssssk....', '.....wwww.....', '..ccrrrrrrc...', '.ccrrRrrRrrs..', '.cCrrryyrrrs..', '.cC.rrrrrr....', '.cC.rRrrRr....'],
+  },
+  archer: {
+    pal: { k: '#3a6a2a', K: '#2a4a1a', s: '#f2c9a0', e: '#1a1020', a: '#6a5a3a', A: '#4a3a24', g: '#c2d65a', q: '#8a5a30', Q: '#e0d8c0', c: '#2e5a26', C: '#1e3a18', l: '#4a3a24', b: '#3a2a1a', B: '#5a4030' },
+    top: ['..........Q...', '.....kkk.qQ...', '....kKKKkq....', '...kKKKKKk....', '...kKseesk....', '...kKssssk....', '....KKKKK.....', '..ccAaaaaAq...', '.ccCaaggaaAs..', '.cCCaaaaaaAs..', '.cC.AaaaaA....', '.cC..AggA.....', '.cC..aaaa.....'],
+  },
+  guardian: {
+    pal: { h: '#e0c070', H: '#a08030', k: '#6a5020', s: '#f2c9a0', e: '#1a1020', a: '#8a90a8', A: '#5a6080', g: '#ffcf5a', p: '#e0c070', c: '#3a5ab8', C: '#24387a', l: '#4a4e60', b: '#2a2e40', B: '#4a4e60' },
+    top: ['......hh......', '....hhhhhh....', '...hhhhhhhh...', '...hHkkkkHh...', '...hHseeshH...', '...HHkkkkHH...', '..ppHHHHHHpp..', '.pppAaaaaApppa', '.ccAaagaaaAas.', '.cCAaggggaAas.', '.cC.AaagaaA...', '.cC.AAAAAA....', '.cC..aaaa.....'],
+  },
+  summoner: {
+    pal: { m: '#e8e0d0', M: '#a89880', e: '#5affe0', h: '#2a6a6a', H: '#1a4a4a', r: '#2a8a8a', R: '#5ad8c8', y: '#ffcf5a', c: '#1a3a3a', C: '#0e2424', l: '#1a3a3a', b: '#2a2a2a', B: '#3a3a3a', s: '#d8c0a0' },
+    top: ['...m......m...', '...mm....mm...', '....hhhhhh....', '...hHHHHHHh...', '...hmmmmmmh...', '...hmemmemh...', '...hHmmmmHh...', '..cchrrrrhc...', '.ccrrRyyRrrs..', '.cCrrrRRrrrs..', '.cC.rrrrrr....', '.cC.rRrrRr....', '.cC.rrrrrr....'],
+  },
+};
+for (const [cls, h] of Object.entries(HEROES)) {
+  for (let f = 0; f < 4; f++) {
+    def(`pl_${cls}_${f}`, () => {
+      const pc = new PixelCanvas(14, 16);
+      pc.map(0, 0, [...h.top, ...LEGS2[f]], h.pal);
+      return pc.outline();
+    });
+  }
+}
+
+def('p_arrow', () => {
+  const pc = new PixelCanvas(12, 3);
+  pc.rect(0, 1, 10, 1, '#e0d0b0'); pc.px(0, 0, '#ffffff'); pc.px(0, 2, '#ffffff'); pc.px(1, 0, '#c8c8c8'); pc.px(1, 2, '#c8c8c8');
+  pc.px(10, 1, '#ffffff'); pc.px(11, 1, '#ffffff'); pc.px(10, 0, '#c8d0e0'); pc.px(10, 2, '#c8d0e0');
+  return pc.outline();
+});
+def('p_magic', () => {
+  const pc = new PixelCanvas(9, 9);
+  pc.ball(4, 4, 4, 4, '#d8d8ff', '#ffffff', '#9a9ac8', '#ffffff');
+  return pc.outline('#2a2a4a');
+});
+def('p_knife', () => {
+  const pc = new PixelCanvas(9, 3);
+  pc.rect(0, 1, 3, 1, '#5a4a6a'); pc.rect(3, 0, 5, 3, '#d8f0ff'); pc.px(8, 1, '#ffffff');
+  return pc.outline();
+});
+def('p_star', () => {
+  const pc = new PixelCanvas(9, 9);
+  pc.line(4, 0, 4, 8, '#fff3c4'); pc.line(0, 4, 8, 4, '#fff3c4'); pc.ball(4, 4, 2, 2, '#ffffff', '#ffffff', '#ffe04a');
+  return pc;
+});
+for (let f = 0; f < 2; f++) {
+  def('comp_' + f, () => {
+    const pc = new PixelCanvas(12, 13);
+    const tx = f ? 1 : -1;
+    pc.ellipse(6 + tx, 10, 2.5, 2, '#a8c8c8');
+    pc.px(6 + tx * 2, 12, '#a8c8c8');
+    pc.ball(6, 6, 4.5, 4.5, '#e0f0f0', '#ffffff', '#a8c8c8', '#ffffff');
+    pc.px(4, 6, '#102a2a'); pc.px(8, 6, '#102a2a');
+    return pc.outline('#0a1a1a');
+  });
+  def('beast_' + f, () => {
+    const pc = new PixelCanvas(16, 12);
+    pc.ball(7, 7, 6, 4, '#e0e0e0', '#ffffff', '#a0a0a0');
+    pc.ball(12, 5, 3, 3, '#e0e0e0', '#ffffff', '#a0a0a0');
+    pc.px(11, 1, '#e0e0e0'); pc.px(13, 1, '#e0e0e0'); pc.px(13, 5, '#102020');
+    const l = f ? 1 : 0;
+    pc.rect(3 + l, 10, 2, 2, '#a0a0a0'); pc.rect(9 - l, 10, 2, 2, '#a0a0a0');
+    return pc.outline('#101818');
+  });
+}

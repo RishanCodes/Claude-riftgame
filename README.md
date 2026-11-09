@@ -79,6 +79,28 @@ Design decisions:
 - **Procedural art with a shared outline pass**, so everything (characters, enemies, bosses,
   props, UI icons) has one cohesive pixel-art style without external assets.
 
+## RIFTBOUND 2.0 additions
+
+- **Six playable heroes** (Hero Hall in the village; switch between runs, each hero remembers its weapon):
+  Swordsman (Whirlwind Cleave, Parry), Assassin (twin daggers, Shadowstep dash, Executioner),
+  Mage (bursting arcane bolts, Arcane Nova, Elemental Resonance), Archer (long-range arrows,
+  Arrowstorm, Eagle Eye stacking), Guardian (wide hammer slams, Bulwark, Unbreakable),
+  Summoner (autonomous spirit companions, Spirit Legion, Soul Bond scaling per room).
+- **Arsenal** (`src/data/gear.ts`): 49 class weapons (8–9 per class), 25 armor pieces
+  (light/medium/heavy/robes/specialized), 26 accessories. Weapons change behavior through data
+  "props" (multishot, pierce, chain lightning, splash, poison, execute, stun, shockwaves, blade
+  waves, homing, falling stars, seismic slams, companion count/damage/style, raising the dead…).
+  Every item has its own procedurally colored pixel icon, also shown in the hero's hand; Mythics glow.
+  All items drop from rooms, elites, bosses, chests and both merchants (75% of weapon drops match your hero).
+- **Duplicate star ranks** (★–★★★★★): copies of the same item (same base and rarity) stack; ranking
+  from N to N+1 stars consumes N spare copies. Each rank raises primary stats; weapons gain crit/attack
+  speed and an enhanced special at ★5, armor gains armor/barrier/defensive pulse, accessories gain
+  cooldown/move speed/reaction and companion bonuses. Rank never changes rarity. Equipped, remembered
+  class weapons and already-ranked copies are never consumed.
+- **Equipment Hall redesign**: stacked inventory (×N), filters (usable, weapons, armor, accessories,
+  can-rank-up), sorting (rarity/rank/new), hero-compatibility letters, new-item dots, rank previews,
+  rank-up animation, comparisons and spare-copy salvage.
+
 ## What is implemented (playable now)
 
 - **Village hub** (animated night village with the Fracture in the sky):
@@ -121,8 +143,7 @@ Design decisions:
 
 ## Not yet implemented / planned
 
-- The other five classes (Assassin, Mage, Archer, Guardian, Summoner) — shown in the Guild as
-  "Coming soon"; the class/attack registry is in place.
+- Per-class bespoke dodge animations (all heroes share the roll) and unique hero idle animations.
 - Mid-run save/resume (closing the browser mid-run loses that run; meta progress is saved).
 - Hand-drawn art and composed music (currently procedural), sprite-sheet animation beyond
   2–4 frames, boss intro cinematics.

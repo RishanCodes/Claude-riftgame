@@ -1,5 +1,6 @@
 import type { Item, Rarity, Slot, StatKey, StatMod } from '../core/types';
 import { chance, pick, rand, uid, weighted } from '../core/rng';
+import { GEAR, type ClassId, type WeaponProps } from './gear';
 
 export const RARITY = [
   { name: 'Common', color: '#b9bcc4', glow: 'rgba(185,188,196,0.35)', mult: 1.0, affixes: 0, salvage: 1, price: 60 },
@@ -16,12 +17,18 @@ export interface BaseDef {
   tier: number; // 0..2 roughly which act it starts dropping
   main: StatMod[];
   icon: string;
+  cls?: ClassId;
+  rarity?: Rarity; // fixed rarity (new arsenal); legacy bases roll any rarity
+  props?: WeaponProps;
+  powers?: string[];
+  grant?: import('../core/types').Element;
+  desc?: string;
 }
 
 export const BASES: BaseDef[] = [
-  { id: 'w_iron', name: 'Iron Blade', slot: 'weapon', tier: 0, icon: 'i_sword1', main: [{ stat: 'damage', type: 'add', v: 5 }] },
-  { id: 'w_sabre', name: 'Runed Sabre', slot: 'weapon', tier: 1, icon: 'i_sword2', main: [{ stat: 'damage', type: 'add', v: 6 }, { stat: 'attackSpeed', type: 'pct', v: 0.06 }] },
-  { id: 'w_great', name: 'Rift Greatsword', slot: 'weapon', tier: 2, icon: 'i_sword3', main: [{ stat: 'damage', type: 'add', v: 9 }, { stat: 'range', type: 'pct', v: 0.08 }] },
+  { id: 'w_iron', cls: 'swordsman', name: 'Iron Blade', slot: 'weapon', tier: 0, icon: 'i_sword1', main: [{ stat: 'damage', type: 'add', v: 5 }] },
+  { id: 'w_sabre', cls: 'swordsman', name: 'Runed Sabre', slot: 'weapon', tier: 1, icon: 'i_sword2', main: [{ stat: 'damage', type: 'add', v: 6 }, { stat: 'attackSpeed', type: 'pct', v: 0.06 }] },
+  { id: 'w_great', cls: 'swordsman', name: 'Rift Greatsword', slot: 'weapon', tier: 2, icon: 'i_sword3', main: [{ stat: 'damage', type: 'add', v: 9 }, { stat: 'range', type: 'pct', v: 0.08 }] },
   { id: 'a_jerkin', name: 'Leather Jerkin', slot: 'armor', tier: 0, icon: 'i_armor1', main: [{ stat: 'maxHp', type: 'add', v: 18 }, { stat: 'armor', type: 'add', v: 3 }] },
   { id: 'a_chain', name: 'Chain Hauberk', slot: 'armor', tier: 1, icon: 'i_armor2', main: [{ stat: 'maxHp', type: 'add', v: 22 }, { stat: 'armor', type: 'add', v: 6 }] },
   { id: 'a_plate', name: 'Warden Plate', slot: 'armor', tier: 2, icon: 'i_armor3', main: [{ stat: 'maxHp', type: 'add', v: 28 }, { stat: 'armor', type: 'add', v: 9 }] },
@@ -37,6 +44,7 @@ export const BASES: BaseDef[] = [
   { id: 'n_charm', name: 'Bone Charm', slot: 'amulet', tier: 0, icon: 'i_amu1', main: [{ stat: 'maxHp', type: 'add', v: 12 }] },
   { id: 'n_pendant', name: 'Moon Pendant', slot: 'amulet', tier: 1, icon: 'i_amu2', main: [{ stat: 'abilityDamage', type: 'pct', v: 0.1 }] },
   { id: 'n_heart', name: 'Rift Heart', slot: 'amulet', tier: 2, icon: 'i_amu3', main: [{ stat: 'elementPower', type: 'pct', v: 0.12 }, { stat: 'maxHp', type: 'add', v: 8 }] },
+  ...GEAR.map((g) => ({ ...g, tier: 0, icon: 'g_' + g.id })),
 ];
 
 export const getBase = (id: string): BaseDef => BASES.find((b) => b.id === id) ?? BASES[0];
@@ -92,7 +100,19 @@ export const POWERS: PowerDef[] = [
   { id: 'echoamulet', name: 'Echo Pendant', slot: 'amulet', desc: 'Your special ability casts again after 0.6s at 60% power.' },
   { id: 'phoenix', name: 'Phoenix Heart', slot: 'amulet', desc: 'Once per run, survive a fatal blow and revive with 40% HP.' },
   { id: 'prism', name: 'Elemental Prism', slot: 'amulet', desc: 'Your special ability also carries a random element.' },
+  { id: 'evasion', name: 'Evasion', slot: 'armor', desc: '10% chance to evade an attack entirely.' },
+  { id: 'dodgeCharge', name: 'Ambush', slot: 'helmet', desc: 'After dodging, your next hit deals +60% damage.' },
+  { id: 'comboCharm', name: 'Rhythm', slot: 'amulet', desc: 'Hits within 1.2s of each other stack +2% damage (max +20%).' },
+  { id: 'unbreakable', name: 'Unbreakable', slot: 'armor', desc: 'After taking a hit, take 25% less damage for 3s.' },
+  { id: 'companion', name: 'Spirit Companion', slot: 'amulet', desc: 'A spirit companion fights beside you.' },
+  { id: 'cdOnKill', name: 'Borrowed Time', slot: 'amulet', desc: 'Kills reduce your special cooldown by 0.5s.' },
+  { id: 'killHaste', name: 'Bloodrush', slot: 'ring', desc: 'Kills grant +25% move speed for 1.5s.' },
+  { id: 'executioner', name: 'Executioner', slot: 'ring', desc: '+30% damage to enemies below 35% HP.' },
+  { id: 'riposte', name: 'Riposte', slot: 'ring', desc: 'After dodging, your next strike is a guaranteed crit.' },
+  { id: 'thorns', name: 'Briar', slot: 'ring', desc: 'Attackers take 80% of your damage.' },
 ];
+// powers only granted by specific items, never rolled randomly onto legacy gear
+const FIXED_ONLY = new Set(['evasion', 'dodgeCharge', 'comboCharm', 'unbreakable', 'companion', 'cdOnKill', 'killHaste', 'executioner', 'riposte', 'thorns']);
 
 export const getPower = (id: string): PowerDef | undefined => POWERS.find((p) => p.id === id);
 
@@ -107,35 +127,50 @@ export function rollRarity(luck: number, minRarity: Rarity = 0, maxRarity: Rarit
   return r;
 }
 
-export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot }): Item {
+const SLOT_WEIGHT: Record<Slot, number> = { weapon: 30, armor: 18, helmet: 12, boots: 12, ring: 14, amulet: 14 };
+
+export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot; cls?: string; base?: string }): Item {
   const tier = opts.tier ?? 0;
-  const pool = BASES.filter((b) => (!opts.slot || b.slot === opts.slot) && b.tier <= tier);
-  const base = pick(pool.length ? pool : BASES);
-  const r = RARITY[opts.rarity];
+  let base: BaseDef;
+  if (opts.base) base = getBase(opts.base);
+  else {
+    const slot = opts.slot ?? weighted(Object.keys(SLOT_WEIGHT) as Slot[], (s) => SLOT_WEIGHT[s]);
+    // weapons: 75% for the current class, otherwise any class (so all weapons stay obtainable)
+    const wantCls = slot === 'weapon' && opts.cls && chance(0.75) ? opts.cls : null;
+    const fits = (b: BaseDef) => b.slot === slot && (!wantCls || b.cls === wantCls) && (b.rarity === undefined ? b.tier <= tier : b.rarity === opts.rarity);
+    let pool = BASES.filter(fits);
+    if (!pool.length) pool = BASES.filter((b) => b.slot === slot && (!wantCls || b.cls === wantCls));
+    base = pick(pool.length ? pool : BASES);
+  }
+  const rarity = (base.rarity ?? opts.rarity) as Rarity;
+  const r = RARITY[rarity];
   const affixes: StatMod[] = [];
-  const used = new Set<string>();
+  const used = new Set<string>(base.main.map((m) => m.stat));
   for (let i = 0; i < r.affixes; i++) {
-    const a = pick(AFFIXES.filter((x) => !used.has(x.stat)));
+    const cands = AFFIXES.filter((x) => !used.has(x.stat));
+    if (!cands.length) break;
+    const a = pick(cands);
     used.add(a.stat);
-    const scale = 1 + opts.rarity * 0.15;
-    let v = rand(a.min, a.max) * scale;
+    let v = rand(a.min, a.max) * (1 + rarity * 0.15);
     v = a.type === 'add' && a.stat === 'armor' ? Math.round(v) : Math.round(v * 1000) / 1000;
     affixes.push({ stat: a.stat, type: a.type, v });
   }
-  const powers: string[] = [];
-  const nPowers = opts.rarity >= 4 ? 2 : opts.rarity >= 3 ? 1 : opts.rarity === 2 && chance(0.25) ? 1 : 0;
-  if (nPowers) {
-    const slotPowers = POWERS.filter((p) => p.slot === base.slot);
-    const first = pick(slotPowers);
-    powers.push(first.id);
-    if (nPowers > 1) {
-      const other = pick(POWERS.filter((p) => p.id !== first.id && (p.slot === base.slot || chance(0.3))));
-      powers.push(other.id);
+  let powers: string[] = [];
+  let name = base.name;
+  if (base.rarity !== undefined) {
+    powers = [...(base.powers ?? [])];
+  } else {
+    const nPowers = rarity >= 4 ? 2 : rarity >= 3 ? 1 : rarity === 2 && chance(0.25) ? 1 : 0;
+    const legacy = POWERS.filter((p) => !FIXED_ONLY.has(p.id));
+    if (nPowers) {
+      const first = pick(legacy.filter((p) => p.slot === base.slot));
+      powers.push(first.id);
+      if (nPowers > 1) powers.push(pick(legacy.filter((p) => p.id !== first.id && (p.slot === base.slot || chance(0.3)))).id);
     }
+    const prefix = powers.length ? getPower(powers[0])!.name : rarity > 0 ? pick(PREFIXES[rarity]) : '';
+    if (prefix) name = `${prefix} ${base.name}`;
   }
-  const prefix = powers.length ? getPower(powers[0])!.name : opts.rarity > 0 ? pick(PREFIXES[opts.rarity]) : '';
-  const name = prefix ? `${prefix} ${base.name}` : base.name;
-  return { id: uid(), base: base.id, slot: base.slot, rarity: opts.rarity, level: 0, affixes, powers, name, isNew: true };
+  return { id: uid(), base: base.id, slot: base.slot, rarity, level: 0, stars: 1, affixes, powers, name, isNew: true };
 }
 
 const PREFIXES: Record<number, string[]> = {
@@ -145,16 +180,78 @@ const PREFIXES: Record<number, string[]> = {
   4: ['Mythbound'],
 };
 
-/** Main stat scaling with rarity and blacksmith level. */
+const LOWER_BETTER = new Set<StatKey>(['abilityCooldown', 'dodgeCooldown', 'damageTaken']);
+const isGood = (m: StatMod) => (LOWER_BETTER.has(m.stat) ? m.v < 0 : m.v > 0);
+
+// ───────── Star ranks (duplicate rank-up) ─────────
+export const MAX_STARS = 5;
+export const STAR_MAIN = [1, 1.15, 1.3, 1.5, 1.75];
+export type Category = 'weapon' | 'armor' | 'accessory';
+export const category = (slot: Slot): Category => (slot === 'weapon' ? 'weapon' : slot === 'ring' || slot === 'amulet' ? 'accessory' : 'armor');
+/** Copies consumed to go from `stars` to `stars + 1`. */
+export const rankCost = (stars: number) => stars;
+export const starsOf = (it: Item) => it.stars ?? 1;
+export const stackKey = (it: Item) => it.base + '|' + it.rarity;
+
+/** Extra bonuses each rank grants, by equipment category. */
+export function rankMods(slot: Slot, stars: number): StatMod[] {
+  const c = category(slot);
+  const out: StatMod[] = [];
+  if (c === 'weapon') {
+    if (stars >= 3) out.push({ stat: 'critChance', type: 'add', v: 0.04 });
+    if (stars >= 4) out.push({ stat: 'attackSpeed', type: 'pct', v: 0.1 });
+    if (stars >= 5) out.push({ stat: 'elementPower', type: 'pct', v: 0.15 });
+  } else if (c === 'armor') {
+    if (stars >= 3) out.push({ stat: 'armor', type: 'add', v: 6 });
+    if (stars >= 5) out.push({ stat: 'damageTaken', type: 'mul', v: -0.08 });
+  } else {
+    if (stars >= 3) out.push({ stat: 'abilityCooldown', type: 'mul', v: -0.05 });
+    if (stars >= 4) out.push({ stat: 'moveSpeed', type: 'pct', v: 0.05 });
+    if (stars >= 5) out.push({ stat: 'reactionDamage', type: 'pct', v: 0.15 });
+  }
+  return out;
+}
+export function rankPowers(slot: Slot, stars: number): string[] {
+  const c = category(slot);
+  if (c === 'armor') return [...(stars >= 4 ? ['bulwark'] : []), ...(stars >= 5 ? ['emberheart'] : [])];
+  if (c === 'accessory' && stars >= 5) return ['compBoost'];
+  return [];
+}
+export function rankBonusText(slot: Slot, stars: number): string[] {
+  const c = category(slot);
+  const main = `Primary stats x${STAR_MAIN[stars - 1]}`;
+  const t: Record<Category, string[]> = {
+    weapon: ['', main, '+4% crit chance', '+10% attack speed', 'Weapon special enhanced: +1 projectile/chain/pierce/companion, +25% effect strength, +15% elemental potency'],
+    armor: ['', main, '+6 armor', 'Barrier that blocks one hit every 10s', '-8% damage taken and a flame pulse when hit'],
+    accessory: ['', main, '-5% ability cooldown', '+5% move speed', '+15% reaction damage and +15% companion damage'],
+  };
+  return [main, t[c][stars - 1]].filter((x, i, a) => x && a.indexOf(x) === i);
+}
+
+/** Weapon behavior, scaled by star rank (5 stars enhances the special). */
+export function weaponProps(it: Item | undefined): WeaponProps {
+  if (!it) return {};
+  const p = { ...(getBase(it.base).props ?? {}) };
+  const st = starsOf(it);
+  const k = 1 + (st - 1) * 0.06 + (st >= 5 ? 0.25 : 0);
+  for (const key of ['poison', 'execute', 'extraStrike', 'stun', 'wave', 'compDmg'] as const) if (p[key] && p[key]! > 0) p[key] = p[key]! * k;
+  for (const key of ['splash', 'aoeOnHit'] as const) if (p[key]) p[key] = Math.round(p[key]! * (1 + (st - 1) * 0.05));
+  if (st >= 5) for (const key of ['multishot', 'pierce', 'chain', 'summons'] as const) if (p[key] !== undefined && p[key]! > 0) p[key] = p[key]! + 1;
+  if (p.extraStrike) p.extraStrike = Math.min(0.6, p.extraStrike);
+  if (p.stun) p.stun = Math.min(0.45, p.stun);
+  return p;
+}
+
+/** Main stat scaling with rarity, blacksmith level and star rank. */
 export function itemMainMods(item: Item): StatMod[] {
   const base = getBase(item.base);
-  const m = RARITY[item.rarity].mult * (1 + item.level * 0.12);
-  return base.main.map((mod) => ({ ...mod, v: mod.v * m }));
+  const m = RARITY[item.rarity].mult * (1 + item.level * 0.12) * STAR_MAIN[starsOf(item) - 1];
+  return base.main.map((mod) => ({ ...mod, v: isGood(mod) ? mod.v * m : mod.v }));
 }
 
 export function itemAllMods(item: Item): StatMod[] {
   const lvlScale = 1 + item.level * 0.05;
-  return [...itemMainMods(item), ...item.affixes.map((a) => ({ ...a, v: a.v * lvlScale }))];
+  return [...itemMainMods(item), ...item.affixes.map((a) => ({ ...a, v: a.v * lvlScale })), ...rankMods(item.slot, starsOf(item))];
 }
 
 export const MAX_ITEM_LEVEL = 10;

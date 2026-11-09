@@ -11,6 +11,8 @@ import { RunScene } from './game/scenes/RunScene';
 import { UI } from './ui/ui';
 import { audio } from './core/audio';
 import { Input } from './ui/input';
+import { selectClass } from './core/save';
+import { generateItem } from './data/items';
 
 const host = document.getElementById('game')!;
 const appEl = document.getElementById('app')!;
@@ -60,4 +62,4 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
 // Debug handle (used by automated play-tests; harmless in production).
-(window as unknown as { __riftbound: unknown }).__riftbound = { App, UI, Input };
+(window as unknown as { __riftbound: unknown }).__riftbound = { App, UI, Input, selectClass, generateItem };

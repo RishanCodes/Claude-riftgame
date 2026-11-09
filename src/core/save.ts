@@ -1,6 +1,7 @@
 import type { Item, Slot } from './types';
 import { SLOTS } from './types';
-import { generateItem } from '../data/items';
+import { generateItem, getBase } from '../data/items';
+import { STARTER_WEAPON, type ClassId } from '../data/gear';
 
 const KEY = 'riftbound_save_v1';
 export const SAVE_VERSION = 1;
@@ -11,6 +12,7 @@ export interface SaveData {
   shards: number;
   renown: number; // account XP
   selectedClass: string;
+  classWeapon: Record<string, string>; // remembered weapon per class
   talents: Record<string, number>;
   inventory: Item[];
   equipped: Record<Slot, string | null>;
@@ -39,7 +41,7 @@ export interface SaveData {
 }
 
 function defaults(): SaveData {
-  const starter = generateItem({ rarity: 0, slot: 'weapon' });
+  const starter = generateItem({ rarity: 0, base: 'w_iron' });
   starter.name = 'Worn Blade';
   starter.isNew = false;
   const equipped = Object.fromEntries(SLOTS.map((s) => [s, null])) as Record<Slot, string | null>;
@@ -50,6 +52,7 @@ function defaults(): SaveData {
     shards: 0,
     renown: 0,
     selectedClass: 'swordsman',
+    classWeapon: {},
     talents: {},
     inventory: [starter],
     equipped,
@@ -93,6 +96,8 @@ export function loadSave(): SaveData {
       const id = data.equipped[s];
       if (id && !data.inventory.some((i) => i.id === id)) data.equipped[s] = null;
     }
+    for (const it of data.inventory) if (!it.stars) it.stars = 1;
+    ensureClassWeapon(data);
     data.version = SAVE_VERSION;
     return data;
   } catch (e) {
@@ -141,4 +146,39 @@ export function renownLevel(xp: number): { level: number; into: number; need: nu
     need = Math.round(100 + (level - 1) * 60);
   }
   return { level, into: rem, need };
+}
+
+const weaponFits = (data: SaveData, id: string | null | undefined, cls: string) => {
+  const it = id ? data.inventory.find((i) => i.id === id) : undefined;
+  return !!it && it.slot === 'weapon' && (getBase(it.base).cls ?? 'swordsman') === cls;
+};
+
+/** Make sure the selected class holds a compatible weapon, granting its starter if none is owned. */
+export function ensureClassWeapon(data: SaveData) {
+  const cls = data.selectedClass;
+  if (weaponFits(data, data.equipped.weapon, cls)) {
+    data.classWeapon[cls] = data.equipped.weapon!;
+    return;
+  }
+  let id = weaponFits(data, data.classWeapon[cls], cls) ? data.classWeapon[cls] : undefined;
+  if (!id) {
+    const owned = data.inventory.filter((i) => weaponFits(data, i.id, cls)).sort((a, b) => b.rarity - a.rarity || (b.stars ?? 1) - (a.stars ?? 1));
+    id = owned[0]?.id;
+  }
+  if (!id) {
+    const starter = generateItem({ rarity: 0, base: STARTER_WEAPON[cls as ClassId] ?? 'w_iron' });
+    starter.isNew = false;
+    data.inventory.push(starter);
+    if (!data.codex.bases.includes(starter.base)) data.codex.bases.push(starter.base);
+    id = starter.id;
+  }
+  data.equipped.weapon = id;
+  data.classWeapon[cls] = id;
+}
+
+export function selectClass(data: SaveData, cls: string) {
+  if (data.equipped.weapon) data.classWeapon[data.selectedClass] = data.equipped.weapon;
+  data.selectedClass = cls;
+  data.equipped.weapon = null;
+  ensureClassWeapon(data);
 }

@@ -19,6 +19,8 @@ export interface EnemyStatus {
   radiance: number;
   stun: number;
   zoneSlow: number;
+  poison: number;
+  poisonDps: number;
 }
 
 export type EliteAffix = 'swift' | 'armored' | 'enraged';
@@ -60,7 +62,7 @@ export class Enemy {
   auraT = 0;
   innateT = 0;
   reactionCd = 0;
-  st: EnemyStatus = { burn: 0, burnDps: 0, decay: 0, decayDps: 0, chill: 0, chillStacks: 0, frozen: 0, soaked: 0, fracture: 0, radiance: 0, stun: 0, zoneSlow: 0 };
+  st: EnemyStatus = { burn: 0, burnDps: 0, decay: 0, decayDps: 0, chill: 0, chillStacks: 0, frozen: 0, soaked: 0, fracture: 0, radiance: 0, stun: 0, zoneSlow: 0, poison: 0, poisonDps: 0 };
   hpShown = 1;
   facing = 1;
   shielded = 0;
@@ -198,7 +200,7 @@ export class Enemy {
   updateStatus(dt: number) {
     const st = this.st;
     st.zoneSlow = 0;
-    for (const k of ['burn', 'decay', 'chill', 'frozen', 'soaked', 'fracture', 'radiance', 'stun'] as const) {
+    for (const k of ['burn', 'decay', 'chill', 'frozen', 'soaked', 'fracture', 'radiance', 'stun', 'poison'] as const) {
       if (st[k] > 0) st[k] = Math.max(0, st[k] - dt);
     }
     if (st.chill <= 0) st.chillStacks = 0;
@@ -219,6 +221,8 @@ export class Enemy {
       this.dotTick = 0.5;
       if (st.burn > 0) this.scene.combat.dot(this, st.burnDps * 0.5, 0xff7a2f);
       if (st.decay > 0 && this.alive) this.scene.combat.dot(this, st.decayDps * 0.5, 0xa25cff);
+      if (st.poison > 0 && this.alive) this.scene.combat.dot(this, st.poisonDps * 0.5, 0x8aff5a);
+      if (st.poison <= 0) st.poisonDps = 0;
     }
   }
 
@@ -251,6 +255,7 @@ export class Enemy {
     else if (this.st.frozen > 0) this.sprite.setTint(0x9feaff);
     else if (this.state === 'windup' && Math.sin(this.stateT * 30) > 0) this.sprite.setTint(0xff8080);
     else if (this.st.chill > 0) this.sprite.setTint(0xc8eaff);
+    else if (this.st.poison > 0 && Math.sin(this.animT * 10) > 0.4) this.sprite.setTint(0xb0ff90);
     else if (this.st.burn > 0 && Math.sin(this.animT * 12) > 0.3) this.sprite.setTint(0xffb080);
     else if (this.elite || this.champion) this.sprite.setTint(this.champion ? 0xffc0c0 : 0xffe8b0);
     else this.sprite.clearTint();

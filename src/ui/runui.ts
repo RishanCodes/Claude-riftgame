@@ -10,6 +10,8 @@ import { getMutation, SYNERGIES, type MutationDef } from '../data/mutations';
 import { EVENTS } from '../data/meta';
 import { ELEMENTS, REACTIONS } from '../data/elements';
 import { RARITY, statLabel } from '../data/items';
+import { ownedCopies, weaponClass } from '../game/inventory';
+import { getClass } from '../data/classes';
 import { compareHTML, discoverItem, itemDetailsHTML, itemTile } from './itemview';
 import { BIOMES } from '../data/biomes';
 import { pick, chance } from '../core/rng';
@@ -124,6 +126,9 @@ export const RunUI = {
     run.itemsFound.push(item);
     discoverItem(item);
     App.persist();
+    const wc = weaponClass(item);
+    const usable = !wc || wc === save.selectedClass;
+    const dupes = ownedCopies(save, item);
     return new Promise((resolve) => {
       const r = RARITY[item.rarity];
       const s = openScreen(`<div class="spacer"></div>
@@ -133,16 +138,18 @@ export const RunUI = {
           <div class="panel item-card reveal" style="border-color:${r.color}">${itemDetailsHTML(item)}${compareHTML(item)}</div>
         </div>
         <div style="height:14px"></div>
+        ${dupes > 1 ? `<div class="gold-text center head" style="margin-top:10px">Duplicate! You own ×${dupes} — rank it up in the Equipment Hall</div>` : ''}
         <div class="row" style="width:100%;max-width:360px">
           <button class="btn grow" data-act="keep">Stash</button>
-          <button class="btn primary grow" data-act="equip">Equip</button>
+          ${usable ? '<button class="btn primary grow" data-act="equip">Equip</button>' : `<button class="btn grow disabled">${getClass(wc!).name} only</button>`}
         </div>
         <div class="muted center" style="font-size:13px;margin-top:8px">All loot is kept in your village inventory.</div>
         <div class="spacer"></div>`);
       audio.play(item.rarity >= 3 ? 'legendary' : 'chest');
       onAct(s, (act) => {
-        if (act === 'equip') {
+        if (act === 'equip' && usable) {
           save.equipped[item.slot] = item.id;
+          if (item.slot === 'weapon') save.classWeapon[save.selectedClass] = item.id;
           item.isNew = false;
           run.recompute();
           audio.play('blessing');

@@ -48,6 +48,7 @@ export interface Item {
   slot: Slot;
   rarity: Rarity;
   level: number;
+  stars?: number; // duplicate rank 1-5 (independent of rarity)
   affixes: StatMod[];
   powers: string[];
   name: string;

@@ -505,7 +505,8 @@ export class RunScene extends Phaser.Scene {
           if (!e.alive || pr.hit.has(e) || e.spawnT > 0) continue;
           if (dist(pr.x, pr.y, e.x, e.y) < pr.r + e.r) {
             pr.hit.add(e);
-            this.combat.hit(e, pr.dmg, { source: 'wave', canCrit: true, element: pr.element, kb: 60, kbAngle: Math.atan2(pr.vy, pr.vx) });
+            if (pr.onHit) pr.onHit(e, pr);
+            else this.combat.hit(e, pr.dmg, { source: 'wave', canCrit: true, element: pr.element, kb: 60, kbAngle: Math.atan2(pr.vy, pr.vx) });
             if (pr.pierce-- <= 0) {
               pr.impact();
               break;
@@ -715,6 +716,11 @@ export class RunScene extends Phaser.Scene {
     this.projectiles.push(pr);
   }
 
+  playerShot(o: Omit<ProjectileOpts, 'team' | 'r'> & { r?: number }) {
+    if (this.projectiles.length > 260) return;
+    this.projectiles.push(new Projectile(this, { r: 6, ...o, team: 'player', passWalls: false }));
+  }
+
   /** Swordsman sword swings deflect enemy projectiles in the arc. */
   deflect(x: number, y: number, a: number, range: number, arc: number) {
     for (const pr of this.projectiles) {
@@ -836,8 +842,16 @@ export class RunScene extends Phaser.Scene {
     if (!p.alive || this.roomState === 'dead' || this.roomState === 'leaving' || this.roomState === 'menu') return false;
     if (!ignoreInvuln && (p.invuln > 0 || p.dodging)) return false;
     if (isZone && p.dodging) return false;
+    if (run.power('evasion') && chance(0.1)) {
+      this.fx.floatText(p.x, p.y - 20, 'Evade', '#c8d8ff', 11);
+      p.invuln = 0.3;
+      return false;
+    }
     if (p.absorbHit()) return false;
     let dmg = amount * run.stats.damageTaken * (1 - run.stats.armor / (run.stats.armor + 100));
+    if (p.unbreakT > 0) dmg *= 0.75;
+    if (p.bulwarkT > 0) dmg *= 0.4;
+    if (p.cls === 'guardian' || run.power('unbreakable')) p.unbreakT = 3;
     if (src && src.st.radiance > 0) dmg *= 0.75;
     dmg = Math.max(1, Math.round(dmg));
     run.hp -= dmg;
@@ -903,6 +917,11 @@ export class RunScene extends Phaser.Scene {
       if (run.power('syn_gildedhunt')) this.dropPickup('shard', e.x, e.y, 1);
     }
     // on-kill powers
+    const pl = this.player;
+    if (run.power('cdOnKill')) pl.specialCd -= 0.5;
+    if (run.power('killHaste')) pl.hasteT = 1.5;
+    if (pl.wp.killReset) pl.specialCd -= run.stats.abilityCooldown * 0.5;
+    if (pl.wp.raise && !e.isBoss && chance(pl.wp.raise)) pl.addTempComps(1, 6);
     const bt = run.power('bloodthirst');
     if (bt) this.healPlayer(run.stats.maxHp * 0.02 * bt, false, true);
     if (run.power('vampiric')) {

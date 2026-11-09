@@ -129,7 +129,7 @@ export function rollRarity(luck: number, minRarity: Rarity = 0, maxRarity: Rarit
 
 const SLOT_WEIGHT: Record<Slot, number> = { weapon: 30, armor: 18, helmet: 12, boots: 12, ring: 14, amulet: 14 };
 
-export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot; cls?: string; base?: string }): Item {
+export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot; cls?: string; base?: string; owned?: Set<string> }): Item {
   const tier = opts.tier ?? 0;
   let base: BaseDef;
   if (opts.base) base = getBase(opts.base);
@@ -140,7 +140,8 @@ export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot;
     const fits = (b: BaseDef) => b.slot === slot && (!wantCls || b.cls === wantCls) && (b.rarity === undefined ? b.tier <= tier : b.rarity === opts.rarity);
     let pool = BASES.filter(fits);
     if (!pool.length) pool = BASES.filter((b) => b.slot === slot && (!wantCls || b.cls === wantCls));
-    base = pick(pool.length ? pool : BASES);
+    // items you already own are 3x as likely, so duplicates for star ranks keep coming
+    base = weighted(pool.length ? pool : BASES, (b) => (opts.owned?.has(b.id) ? 3 : 1));
   }
   const rarity = (base.rarity ?? opts.rarity) as Rarity;
   const r = RARITY[rarity];

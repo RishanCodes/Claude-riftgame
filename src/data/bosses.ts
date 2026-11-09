@@ -44,7 +44,7 @@ export const BOSSES: BossDef[] = [
     name: 'The Rift Tyrant',
     title: 'Herald of the Fracture',
     biome: 2,
-    hp: 4200,
+    hp: 3800,
     dmg: 20,
     radius: 32,
     phases: [0.65, 0.3],

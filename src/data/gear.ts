@@ -75,7 +75,7 @@ export const GEAR: GearDef[] = [
     ['s_storm', 'Stormbreaker', 2, 'greatsword', ['#ffe04a', '#4a4a6a', '#ffffff'], { dmg: 9, as: -0.12, rng: 0.1 }, { element: 'lightning', chain: 3 }, 'A heavy blade whose blows arc lightning to 3 more foes.'],
     ['s_moonsteel', 'Moonsteel Greatsword', 2, 'greatsword', ['#d8e0ff', '#5a5a8a', '#a8c8ff'], { dmg: 12, as: -0.18, rng: 0.18, arc: 40 }, { aoeOnHit: 40, knock: 1.5 }, 'Slow, crushing sweeps that shake the ground where they land.'],
     ['s_celestial', 'Celestial Edge', 3, 'longsword', ['#fff3c4', '#ffcf5a', '#ffffff'], { dmg: 10, crit: 0.05 }, { element: 'light', wave: 0.8 }, 'Radiant waves of light follow every swing.'],
-    ['s_eclipse', 'Eclipse Reaver', 4, 'greatsword', ['#2a1a40', '#ffcf5a', '#a25cff'], { dmg: 14, as: 0.05 }, { element: 'shadow', wave: 1, chain: 2, execute: 0.4 }, 'Dusk and dawn in one blade: shadow strikes, piercing waves, and death to the weakened.'],
+    ['s_eclipse', 'Eclipse Reaver', 4, 'greatsword', ['#2a1a40', '#ffcf5a', '#a25cff'], { dmg: 13, as: 0.05 }, { element: 'shadow', wave: 0.7, chain: 1, execute: 0.4 }, 'Dusk and dawn in one blade: shadow strikes, piercing waves, and death to the weakened.'],
   ]),
   // ───────── Assassin ─────────
   ...weapons('assassin', [
@@ -97,7 +97,7 @@ export const GEAR: GearDef[] = [
     ['m_codex', 'Arcane Codex', 2, 'tome', ['#3a5ab8', '#ffcf5a', '#c8a0ff'], { dmg: 4, ad: 0.1 }, { homing: 3, pierce: 1, multishot: 1 }, 'Seeking bolts that pass through their first target.'],
     ['m_abyss', 'Abyssal Grimoire', 2, 'tome', ['#2a1440', '#a25cff', '#ff5ac8'], { dmg: 7, as: -0.1 }, { element: 'shadow', splash: 45 }, 'Slow, heavy orbs of void that rot everything nearby.'],
     ['m_astral', 'Astral Catalyst', 3, 'orb', ['#c8b0ff', '#3a2a6a', '#ffffff'], { dmg: 6, ad: 0.25 }, { multishot: 2, homing: 2 }, 'Three homing star-bolts per cast.'],
-    ['m_rift', 'Staff of the Rift', 4, 'staff', ['#a25cff', '#ffcf5a', '#ff5ac8'], { dmg: 9, ep: 0.2 }, { randomElement: 1, splash: 40, multishot: 1, chain: 2 }, 'Each bolt carries a random element. Reactions everywhere.'],
+    ['m_rift', 'Staff of the Rift', 4, 'staff', ['#a25cff', '#ffcf5a', '#ff5ac8'], { dmg: 7, ep: 0.15 }, { randomElement: 1, splash: 24 }, 'Most bolts carry a random element and every bolt bursts on impact. Reactions everywhere.'],
   ]),
   // ───────── Archer ─────────
   ...weapons('archer', [
@@ -116,7 +116,7 @@ export const GEAR: GearDef[] = [
     ['g_stone', 'Stonebreaker Mace', 0, 'mace', ['#a07a4a', '#5a3e22', '#d8b47a'], { dmg: 5, kb: 0.3 }, { element: 'earth' }, 'Cracks armor (Fracture) and sends foes flying.'],
     ['g_bastion', 'Bastion Hammer', 1, 'hammer', ['#5a7ac8', '#ffcf5a', '#ffffff'], { dmg: 5, arm: 8 }, { stun: 0.2 }, 'A defender’s hammer: blows often stun.'],
     ['g_glacial', 'Glacial Maul', 1, 'hammer', ['#9feaff', '#3a5a88', '#ffffff'], { dmg: 7, as: -0.1 }, { element: 'ice', aoeOnHit: 40 }, 'Every impact bursts into a frost shockwave.'],
-    ['g_thunder', 'Thundercrusher', 2, 'mace', ['#ffe04a', '#4a4a6a', '#ffffff'], { dmg: 8 }, { element: 'lightning', chain: 2, aoeOnHit: 45 }, 'Thunderclap impacts that arc to nearby foes.'],
+    ['g_thunder', 'Thundercrusher', 2, 'mace', ['#ffe04a', '#4a4a6a', '#ffffff'], { dmg: 7 }, { element: 'lightning', chain: 1, aoeOnHit: 35 }, 'Thunderclap impacts that arc to nearby foes.'],
     ['g_halberd', "Sentinel's Halberd", 2, 'halberd', ['#c8d0e0', '#3a5ab8', '#ffcf5a'], { dmg: 7, rng: 0.35, arc: -40, as: 0.1 }, { knock: 1.3 }, 'Long reach keeps enemies at bay.'],
     ['g_titan', 'Titanbreaker', 3, 'hammer', ['#8a5a30', '#ffcf5a', '#ff7a2f'], { dmg: 14, as: -0.15 }, { aoeOnHit: 60, stun: 0.25, knock: 1.5 }, 'Earth-shattering blows that stun and scatter.'],
     ['g_world', 'Worldwarden', 4, 'hammer', ['#6aa84a', '#3a2414', '#5affb0'], { dmg: 12, arm: 15, hp: 40 }, { element: 'earth', aoeOnHit: 55, quake: 1 }, 'Every fourth swing is a seismic slam that stuns all around you.'],
@@ -124,8 +124,8 @@ export const GEAR: GearDef[] = [
   // ───────── Summoner ─────────
   ...weapons('summoner', [
     ['u_totem', 'Spirit Totem', 0, 'totem', ['#8a6a4a', '#5ad8c8', '#ffffff'], { dmg: 2 }, null, 'Calls two loyal spirits.'],
-    ['u_bone', 'Bonecaller Staff', 0, 'staff', ['#e0d8c0', '#5a5a6a', '#9aff9a'], {}, { summons: 1, compDmg: -0.25 }, 'One more spirit, each a little weaker.'],
-    ['u_verdant', 'Verdant Idol', 1, 'idol', ['#4f8a3a', '#c2d65a', '#ff9ac8'], { hp: 20 }, { element: 'earth', compDmg: 0.15 }, 'Spirits strike with the weight of stone (Fracture).'],
+    ['u_bone', 'Bonecaller Staff', 0, 'staff', ['#e0d8c0', '#5a5a6a', '#9aff9a'], {}, { summons: 1, compDmg: -0.15 }, 'One more spirit, each a little weaker.'],
+    ['u_verdant', 'Verdant Idol', 1, 'idol', ['#4f8a3a', '#c2d65a', '#ff9ac8'], { hp: 20 }, { element: 'earth', compDmg: 0.3 }, 'Spirits strike with the weight of stone (Fracture).'],
     ['u_wisp', 'Wisp Lantern', 1, 'lantern', ['#ffcf5a', '#3a2a1a', '#fff3c4'], {}, { summons: 2, compDmg: -0.35, compRate: 0.25 }, 'A swarm of quick little wisps.'],
     ['u_beast', "Beastmaster's Scepter", 2, 'staff', ['#a86a3a', '#ff9a3c', '#ffe04a'], { dmg: 3 }, { summons: -1, compDmg: 0.9, compStyle: 'melee' }, 'Fewer companions, but they are beasts that maul in melee.'],
     ['u_necro', "Necromancer's Grimoire", 2, 'tome', ['#2a3a2a', '#9aff9a', '#e0d8c0'], {}, { raise: 0.25 }, 'Slain enemies may rise as temporary spirits.'],
@@ -199,7 +199,7 @@ export const STARTER_WEAPON: Record<ClassId, string> = {
 
 const PROP_TEXT: [keyof WeaponProps, (v: number | string) => string][] = [
   ['element', (v) => `Strikes carry ${String(v)[0].toUpperCase() + String(v).slice(1)}`],
-  ['randomElement', () => 'Each shot carries a random element'],
+  ['randomElement', () => '75% of shots carry a random element'],
   ['multishot', (v) => `+${v} projectile${Number(v) > 1 ? 's' : ''}`],
   ['pierce', (v) => `Pierces ${v} enem${Number(v) > 1 ? 'ies' : 'y'}`],
   ['chain', (v) => `Hits chain lightning to ${v} foes`],

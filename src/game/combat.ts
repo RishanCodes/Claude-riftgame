@@ -52,6 +52,11 @@ export class Combat {
     if (crit && o.source !== 'dot') {
       s.fx.critBurst(e.x, e.y);
       if (run.power('insight')) s.player.specialCd -= 0.4;
+      const pl = s.player;
+      if (pl.cls === 'assassin' && pl.critHealT <= 0) {
+        pl.critHealT = 0.33;
+        s.healPlayer(st.maxHp * 0.015, false, true);
+      }
       if (run.power('syn_shattered')) s.player.dodgeCd -= 0.15;
       if (run.power('frostbrand')) this.applyElement(e, 'ice', 1);
       s.hitStop(0.035);

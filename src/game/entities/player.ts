@@ -88,6 +88,9 @@ export class Player {
   stepT = 0;
   stepDir = 0;
   aimT = 0;
+  critHealT = 0;
+  lastStepGuard = -10;
+  stepRefunded = false;
   aimA = 0;
   shots = 0;
 
@@ -193,11 +196,17 @@ export class Player {
     const s = this.scene;
     const el = o.el;
     const splash = o.splash ?? 0;
+    const sx0 = this.x;
+    const sy0 = this.y;
     s.playerShot({
       x: this.x + Math.cos(a) * 10, y: this.y - 4 + Math.sin(a) * 10, angle: a, speed: (o.speed ?? 320) * (this.wp.speed ?? 1), dmg, tex,
       pierce: o.pierce ?? 0, homing: o.homing ?? 0, life: o.life ?? 1, scale: o.scale ?? 1, element: el,
       tint: o.tint ?? (el ? ELEMENTS[el].color : undefined),
       onHit: (e, pr) => {
+        // long-range falloff: shots lose up to 35% damage past 180 units of flight
+        const flown = Math.hypot(e.x - sx0, e.y - sy0);
+        const fall = 1 - 0.35 * Math.max(0, Math.min(1, (flown - 180) / 150));
+        pr.dmg *= fall;
         this.strike(e, pr.dmg, { source: o.source ?? 'attack', el, kb: 50, angle: Math.atan2(pr.vy, pr.vx) });
         if (splash) {
           s.fx.ring(e.x, e.y, splash, el ? ELEMENTS[el].color : 0xc8c8ff, 0.25, 3);
@@ -214,7 +223,7 @@ export class Player {
   }
 
   compDamage(): number {
-    let m = 0.55 * (1 + (this.wp.compDmg ?? 0)) * (1 + this.run.power('compBoost') * 0.15);
+    let m = 0.85 * (1 + (this.wp.compDmg ?? 0)) * (1 + this.run.power('compBoost') * 0.15);
     if (this.cls === 'summoner') m *= 1 + Math.min(0.9, this.run.roomsCleared * 0.05);
     else m *= 0.6; // relic companions for other classes are helpers, not a build
     return this.stats.damage * m;
@@ -243,7 +252,7 @@ export class Player {
       this.companions.splice(this.companions.indexOf(c), 1);
     }
     void want;
-    const rate = 1.1 / (1 + (this.wp.compRate ?? 0));
+    const rate = 0.95 / (1 + (this.wp.compRate ?? 0));
     const el = this.wp.element;
     const tint = el ? ELEMENTS[el].color : this.cls === 'summoner' ? 0x8affe8 : 0xc8e8ff;
     this.companions.forEach((c, i) => {
@@ -322,6 +331,7 @@ export class Player {
     this.slowT -= dt;
     this.windwalkT -= dt;
     this.unbreakT -= dt;
+    this.critHealT -= dt;
     this.bulwarkT -= dt;
     this.hasteT -= dt;
     this.comboT -= dt;
@@ -627,8 +637,8 @@ const bolt: Fire = (p, _t, a, mult) => {
   s.sfx('shoot');
   const n = 1 + (wp.multishot ?? 0);
   for (let i = 0; i < n; i++) {
-    const el = wp.randomElement ? pick(ELEMENT_LIST) : p.nextElement();
-    p.shoot(a + (i - (n - 1) / 2) * 0.2, p.stats.damage * mult, 'p_magic', { speed: 290, el, splash: 22 + (wp.splash ?? 0), pierce: wp.pierce ?? 0, homing: wp.homing ?? 0, life: 1.1, tint: el ? ELEMENTS[el].color : 0xc8a0ff });
+    const el = wp.randomElement && chance(0.75) ? pick(ELEMENT_LIST) : p.nextElement();
+    p.shoot(a + (i - (n - 1) / 2) * 0.2, p.stats.damage * mult, 'p_magic', { speed: 290, el, splash: 30 + (wp.splash ?? 0), pierce: wp.pierce ?? 0, homing: wp.homing ?? 0, life: 1.1, tint: el ? ELEMENTS[el].color : 0xc8a0ff });
   }
 };
 
@@ -742,7 +752,11 @@ export const SPECIALS: Record<string, SpecialImpl> = {
       if (power >= 1) {
         p.stepT = 0.16;
         p.stepDir = dir;
-        p.invuln = Math.max(p.invuln, 0.35);
+        // full 0.6s of safety at most every 2s, so refunds cannot chain into permanent invulnerability
+        const now = p.animT;
+        p.invuln = Math.max(p.invuln, now - p.lastStepGuard >= 2 ? 0.6 : 0.22);
+        if (now - p.lastStepGuard >= 2) p.lastStepGuard = now;
+        p.stepRefunded = false;
       }
       s.delay(0.08, () => slashPath(1, 0xc87cff));
       if (p.wp.stepEcho) s.delay(0.5, () => slashPath(0.7, 0x9a7cff));
@@ -760,8 +774,8 @@ export const SPECIALS: Record<string, SpecialImpl> = {
   mage: {
     cast(p, power) {
       const s = p.scene;
-      const r = 120 * areaScale(p);
-      const dmg = p.stats.damage * 2.6 * p.stats.abilityDamage * power;
+      const r = 105 * areaScale(p);
+      const dmg = p.stats.damage * 2.2 * p.stats.abilityDamage * power;
       s.sfx('boom');
       s.fx.explosion(p.x, p.y, r, 0xc8a0ff);
       s.fx.ring(p.x, p.y, r * 0.7, 0x5aa8ff, 0.5, 6);
@@ -804,7 +818,10 @@ export const SPECIALS: Record<string, SpecialImpl> = {
     cast(p, power) {
       const s = p.scene;
       const r = 110 * areaScale(p);
-      if (power >= 1) p.bulwarkT = 3;
+      if (power >= 1) {
+        p.bulwarkT = 3;
+        p.specialCd = Math.max(p.specialCd, 4.5); // cannot be chained into permanent uptime
+      }
       s.sfx('shield');
       s.fx.ring(p.x, p.y, r, 0xffcf5a, 0.5, 8);
       s.fx.shake(0.15, 0.006);

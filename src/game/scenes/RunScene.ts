@@ -126,6 +126,7 @@ export class RunScene extends Phaser.Scene {
   eventPair: [Element, Element] | null = null;
   ambient?: Phaser.GameObjects.Particles.ParticleEmitter;
   tutorialStep = 0;
+  ckT = 8;
 
   constructor() {
     super('Run');
@@ -185,6 +186,8 @@ export class RunScene extends Phaser.Scene {
     UI.hud.show(this);
 
     this.setupRoom();
+    this.checkpoint();
+    this.ckT = 8;
     audio.startMusic(this.biome.music.root, this.biome.music.scale, this.roomType === 'boss');
   }
 
@@ -286,7 +289,12 @@ export class RunScene extends Phaser.Scene {
     const run = this.run;
     const t = this.roomType;
     UI.hud.setRoom(this);
-    if (t === 'start' || t === 'combat' || t === 'elite') {
+    if (run.roomDone && t !== 'treasure' && t !== 'shrine' && t !== 'merchant' && t !== 'event') {
+      // resumed after this room was already cleared
+      this.roomState = 'cleared';
+      this.banner('Run resumed', 'Choose your next path');
+      this.openDoors();
+    } else if (t === 'start' || t === 'combat' || t === 'elite') {
       this.roomState = 'fight';
       this.waves = this.buildWaves(t);
       this.waveTimer = 0.6;
@@ -300,8 +308,11 @@ export class RunScene extends Phaser.Scene {
       this.delay(0.8, () => this.spawnBoss());
     } else {
       this.roomState = 'calm';
-      run.roomsCleared++;
-      if (run.roomsCleared % 3 === 0) run.mutationPending = true;
+      if (!run.roomDone) {
+        run.roomsCleared++;
+        if (run.roomsCleared % 3 === 0) run.mutationPending = true;
+        run.roomDone = true;
+      }
       const cx = this.W / 2;
       const cy = this.H * 0.42;
       if (t === 'treasure') {
@@ -421,6 +432,12 @@ export class RunScene extends Phaser.Scene {
 
   // ───────────────────────── update ─────────────────────────
   override update(_time: number, deltaMs: number) {
+    // automated balance tests can fast-forward the real simulation in fixed substeps
+    const steps = (window as unknown as { __simSteps?: number }).__simSteps ?? 1;
+    for (let i = 0; i < steps && this.sys.isActive(); i++) this.step(steps > 1 ? 33 : deltaMs);
+  }
+
+  step(deltaMs: number) {
     if (!this.run || !this.player) return;
     let dt = Math.min(deltaMs, 50) / 1000;
     this.run.elapsed += dt;
@@ -444,6 +461,16 @@ export class RunScene extends Phaser.Scene {
     if (this.roomState !== 'dead') this.player.update(dt);
 
     // waves
+    this.ckT -= dt;
+    if (this.ckT <= 0) {
+      this.ckT = 8;
+      const ar = App.save.activeRun;
+      if (ar && App.run === this.run && this.roomState !== 'dead') {
+        ar.hp = Math.min(ar.hp, Math.max(1, this.run.hp));
+        ar.elapsed = this.run.elapsed;
+        App.persist();
+      }
+    }
     if (this.roomState === 'fight') {
       this.combatTime += dt;
       if (this.waveIdx < this.waves.length) {
@@ -920,7 +947,10 @@ export class RunScene extends Phaser.Scene {
     const pl = this.player;
     if (run.power('cdOnKill')) pl.specialCd -= 0.5;
     if (run.power('killHaste')) pl.hasteT = 1.5;
-    if (pl.wp.killReset) pl.specialCd -= run.stats.abilityCooldown * 0.5;
+    if (pl.wp.killReset && !pl.stepRefunded) {
+      pl.stepRefunded = true; // once per Shadowstep
+      pl.specialCd -= run.stats.abilityCooldown * 0.5;
+    }
     if (pl.wp.raise && !e.isBoss && chance(pl.wp.raise)) pl.addTempComps(1, 6);
     const bt = run.power('bloodthirst');
     if (bt) this.healPlayer(run.stats.maxHp * 0.02 * bt, false, true);
@@ -1052,9 +1082,17 @@ export class RunScene extends Phaser.Scene {
       await this.modal(() => UI.run.chooseMutation(this));
       if (this.stale(run)) return;
     }
-    App.persist();
+    run.roomDone = true;
+    this.checkpoint();
     this.roomState = 'cleared';
     this.openDoors();
+  }
+
+  /** Save a resumable checkpoint of the run (resume restarts the current room unless it is done). */
+  checkpoint() {
+    if (this.roomState === 'dead' || App.run !== this.run) return;
+    App.save.activeRun = this.run.snapshot(this.run.roomDone);
+    App.persist();
   }
 
   /** True when an async room flow should abort (run ended or the scene moved on). */
@@ -1158,7 +1196,13 @@ export class RunScene extends Phaser.Scene {
     const glow = this.add.image(x, y - 14, 'fx_glow').setTint(kind === 'shrine' ? 0x5affb0 : kind === 'altar' ? 0xa25cff : 0xffcf5a).setBlendMode(Phaser.BlendModes.ADD).setScale(1.6).setAlpha(0.35).setDepth(99 + y);
     this.tweens.add({ targets: glow, alpha: 0.55, scale: 1.9, yoyo: true, repeat: -1, duration: 1100 });
     this.obstacles.push({ x, y, r: r * 0.6 });
-    this.interactables.push({ kind, x, y, r: r + 6, img, used: false, armed: true, extra: [glow] });
+    const used = kind !== 'merchant' && this.run.usedNodes.includes(this.run.nodeId);
+    if (used) {
+      if (kind === 'chest') img.setTexture('chest_1');
+      else img.setTint(0x6a6a7a);
+      glow.setVisible(false);
+    }
+    this.interactables.push({ kind, x, y, r: r + 6, img, used, armed: true, extra: [glow] });
   }
 
   async interact(it: Interactable) {
@@ -1189,12 +1233,15 @@ export class RunScene extends Phaser.Scene {
           run.nodeId = it.target!;
           run.node.visited = true;
         }
+        run.roomDone = false;
         App.persist();
         this.scene.restart();
         return;
       }
       case 'chest': {
         it.used = true;
+        run.usedNodes.push(run.nodeId);
+        this.checkpoint();
         it.img?.setTexture('chest_1');
         this.sfx('chest');
         this.fx.burst(it.x, it.y - 10, 0xffcf5a, 24, 160);
@@ -1207,6 +1254,8 @@ export class RunScene extends Phaser.Scene {
       }
       case 'shrine': {
         it.used = true;
+        run.usedNodes.push(run.nodeId);
+        this.checkpoint();
         await this.modal(() => UI.run.shrine(this));
         it.img?.setTint(0x6a6a7a);
         return;
@@ -1217,6 +1266,8 @@ export class RunScene extends Phaser.Scene {
       }
       case 'altar': {
         it.used = true;
+        run.usedNodes.push(run.nodeId);
+        this.checkpoint();
         await this.modal(() => UI.run.event(this));
         it.img?.setTint(0x6a6a7a);
         return;

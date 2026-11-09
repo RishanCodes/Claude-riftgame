@@ -17,9 +17,21 @@ class AudioEngine {
   private musicTimer: number | null = null;
   private musicNodes: AudioNode[] = [];
 
+  private music: { root: number; scale: number[]; intense: boolean } | null = null;
+  hidden = false;
+  onBlocked: ((blocked: boolean) => void) | null = null;
+
+  get running() {
+    return !!this.ctx && this.ctx.state === 'running';
+  }
+
+  /** Call from any user gesture: creates or resumes the context (iOS also uses 'interrupted'). */
   unlock() {
+    if (this.ctx && this.ctx.state === 'closed') {
+      this.ctx = null; // the browser killed it: rebuild below
+    }
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      if (this.ctx.state !== 'running') void this.ctx.resume().then(() => this.afterResume()).catch(() => {});
       return;
     }
     try {
@@ -41,9 +53,42 @@ class AudioEngine {
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      this.ctx.onstatechange = () => this.onBlocked?.(!this.hidden && !!this.ctx && this.ctx.state !== 'running');
+      if (this.music) this.startMusic(this.music.root, this.music.scale, this.music.intense);
     } catch {
       this.ctx = null;
     }
+  }
+
+  private afterResume() {
+    this.onBlocked?.(false);
+    // the drone keeps playing through a suspend; only restart music if it was stopped
+    if (this.music && this.musicTimer === null) this.startMusic(this.music.root, this.music.scale, this.music.intense);
+  }
+
+  /** Page hidden: stop scheduling sounds and suspend so nothing piles up. */
+  pause() {
+    this.hidden = true;
+    if (this.musicTimer !== null) window.clearInterval(this.musicTimer);
+    this.musicTimer = null;
+    if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend().catch(() => {});
+  }
+
+  /** Page visible again: try to resume; if the browser refuses without a gesture, report it. */
+  resume() {
+    this.hidden = false;
+    if (!this.ctx) return;
+    const done = () => {
+      if (this.ctx && this.ctx.state === 'running') this.afterResume();
+      else this.onBlocked?.(true);
+    };
+    if (this.ctx.state === 'closed') {
+      this.ctx = null;
+      this.onBlocked?.(true);
+      return;
+    }
+    this.ctx.resume().then(done, done);
+    setTimeout(done, 600);
   }
 
   setVolumes(sfx: number, music: number) {
@@ -88,7 +133,7 @@ class AudioEngine {
   }
 
   play(name: SfxName, intensity = 1) {
-    if (!this.ctx || this.sfxVol <= 0) return;
+    if (!this.ctx || this.sfxVol <= 0 || this.ctx.state !== 'running') return;
     const now = performance.now();
     const minGap: Partial<Record<SfxName, number>> = { hit: 35, coin: 40, crit: 50, shoot: 50, kill: 40, zap: 60, telegraph: 120 };
     if (minGap[name] && now - (this.lastPlay[name] ?? 0) < minGap[name]!) return;
@@ -194,8 +239,9 @@ class AudioEngine {
 
   /** Very light generative ambient: a drone + sparse pentatonic plucks. */
   startMusic(root: number, scale: number[], intense = false) {
+    this.music = { root, scale, intense };
     this.stopMusic();
-    if (!this.ctx || !this.musicGain) return;
+    if (!this.ctx || !this.musicGain || this.hidden) return;
     const ctx = this.ctx;
     const drone = ctx.createOscillator();
     const drone2 = ctx.createOscillator();
@@ -217,7 +263,7 @@ class AudioEngine {
     this.musicNodes.push(drone, drone2, dg, lp);
     let step = 0;
     const tick = () => {
-      if (!this.ctx || !this.musicGain) return;
+      if (!this.ctx || !this.musicGain || this.ctx.state !== 'running') return;
       const t = this.ctx.currentTime;
       if (Math.random() < (intense ? 0.85 : 0.55)) {
         const deg = scale[Math.floor(Math.random() * scale.length)];
@@ -249,6 +295,12 @@ class AudioEngine {
       step++;
     };
     this.musicTimer = window.setInterval(tick, intense ? 300 : 520);
+  }
+
+  /** Stop music for good (e.g. results screen); it will not auto-restart on resume. */
+  silence() {
+    this.music = null;
+    this.stopMusic();
   }
 
   stopMusic() {

@@ -1,6 +1,7 @@
 import type { Item, Slot } from './types';
 import { SLOTS } from './types';
-import { generateItem, getBase } from '../data/items';
+import { generateItem, getBase, BASES } from '../data/items';
+const validBase = (id: string) => BASES.some((b) => b.id === id);
 import { STARTER_WEAPON, type ClassId } from '../data/gear';
 
 const KEY = 'riftbound_save_v1';
@@ -37,6 +38,8 @@ export interface SaveData {
   settings: { sfx: number; music: number; shake: boolean; damageNumbers: boolean; haptics: boolean };
   tier: number;
   maxTier: number;
+  savedAt: number;
+  activeRun: RunSnapshot | null;
   merchant: { stock: Item[]; refreshes: number; seedRun: number };
 }
 
@@ -62,6 +65,8 @@ function defaults(): SaveData {
     settings: { sfx: 0.7, music: 0.4, shake: true, damageNumbers: true, haptics: true },
     tier: 1,
     maxTier: 1,
+    savedAt: 0,
+    activeRun: null,
     merchant: { stock: [], refreshes: 0, seedRun: -1 },
   };
 }
@@ -86,11 +91,38 @@ function merge<T>(def: T, loaded: unknown): T {
 let storageOk = true;
 
 export function loadSave(): SaveData {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return defaults();
+    raw = localStorage.getItem(KEY);
+  } catch {
+    storageOk = false;
+  }
+  const primary = raw ? parseSave(raw) : null;
+  if (primary) return primary;
+  if (raw) {
+    console.warn('Save corrupt, trying backup');
+    try {
+      localStorage.setItem(KEY + '_corrupt_backup', raw);
+      const b = localStorage.getItem(KEY + '_backup');
+      const bk = b ? parseSave(b) : null;
+      if (bk) return bk;
+    } catch {
+      /* ignore */
+    }
+  }
+  return defaults();
+}
+
+/** Validate and migrate a serialized save. Returns null if it is not a usable Riftbound save. */
+export function parseSave(raw: string): SaveData | null {
+  try {
     const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.inventory) || typeof parsed.gold !== 'number') return null;
     const data = merge(defaults(), parsed);
+    data.inventory = data.inventory.filter((i) => i && typeof i.id === 'string' && typeof i.base === 'string' && validBase(i.base));
+    if (!Number.isFinite(data.gold) || data.gold < 0) data.gold = 0;
+    if (!Number.isFinite(data.shards) || data.shards < 0) data.shards = 0;
+    if (data.activeRun && (typeof data.activeRun.act !== 'number' || !data.activeRun.map)) data.activeRun = null;
     // integrity: drop equipped references to missing items
     for (const s of SLOTS) {
       const id = data.equipped[s];
@@ -101,20 +133,66 @@ export function loadSave(): SaveData {
     data.version = SAVE_VERSION;
     return data;
   } catch (e) {
-    console.warn('Save load failed, starting fresh', e);
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) localStorage.setItem(KEY + '_corrupt_backup', raw);
-    } catch {
-      storageOk = false;
-    }
-    return defaults();
+    console.warn('Save parse failed', e);
+    return null;
   }
 }
 
-export function writeSave(data: SaveData): boolean {
+type SaveListener = (json: string) => void;
+const saveListeners: SaveListener[] = [];
+export const onSaveWritten = (f: SaveListener) => saveListeners.push(f);
+
+/** Portable save code for manual backup / transfer between devices. */
+export const exportSave = (d: SaveData) => 'RB1:' + btoa(unescape(encodeURIComponent(JSON.stringify(d))));
+export function importSave(code: string): SaveData | null {
+  const t = code.trim();
+  if (!t.startsWith('RB1:')) return null;
   try {
-    localStorage.setItem(KEY, JSON.stringify(data));
+    return parseSave(decodeURIComponent(escape(atob(t.slice(4)))));
+  } catch {
+    return null;
+  }
+}
+
+export interface RunSnapshot {
+  cls: string;
+  tier: number;
+  act: number;
+  map: import('./types').ActMap;
+  nodeId: number;
+  roomsCleared: number;
+  hp: number;
+  blessings: Record<string, number>;
+  mutations: Record<string, number>;
+  extraMods: import('./types').StatMod[];
+  elementOrder: import('./types').Element[];
+  gold: number;
+  shards: number;
+  kills: number;
+  elapsed: number;
+  itemIds: string[];
+  bossesSlain: string[];
+  rerolls: number;
+  phoenixUsed: boolean;
+  mutationPending: boolean;
+  roomDone: boolean;
+  usedNodes: number[];
+}
+
+let lastBackup = 0;
+export function writeSave(data: SaveData): boolean {
+  data.savedAt = Date.now();
+  const json = JSON.stringify(data);
+  saveListeners.forEach((f) => f(json));
+  try {
+    // rotate a known-good backup every 2 minutes before overwriting
+    if (Date.now() - lastBackup > 120000) {
+      const prev = localStorage.getItem(KEY);
+      if (prev) localStorage.setItem(KEY + '_backup', prev);
+      lastBackup = Date.now();
+    }
+    localStorage.setItem(KEY, json);
+    storageOk = true;
     return true;
   } catch (e) {
     if (storageOk) console.warn('Could not write save (storage unavailable?)', e);

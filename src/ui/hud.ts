@@ -90,8 +90,8 @@ export class Hud {
       <div class="joyzone"></div>
       <div class="joy"><div class="knob"></div></div>
       <div class="joy-hint">Drag to move</div>
-      <div class="abil special"><div class="cd"></div>${icon('spiral', 'lg')}<span class="lbl">SPECIAL</span><span class="key">E</span></div>
-      <div class="abil dodge"><div class="cd"></div>${icon('dodge', 'md')}<span class="lbl">DODGE</span><span class="key">SPACE</span></div>
+      <div class="abil special"><div class="cd"></div><span class="sic">${icon('spiral', 'lg')}</span><span class="lbl">SPECIAL</span><span class="cdnum"></span><span class="key">E</span></div>
+      <div class="abil dodge"><div class="cd"></div>${icon('dodge', 'md')}<span class="lbl">DODGE</span><span class="cdnum"></span><span class="key">SPACE</span></div>
     </div>`);
     ui.appendChild(this.controls);
     this.joy = this.controls.querySelector('.joy')!;
@@ -190,6 +190,11 @@ export class Hud {
     this.mutKey = '';
     this.elKey = '';
     this.joyHint.style.opacity = scene.run.roomsCleared === 0 ? '1' : '0';
+    const cls = scene.player?.cls ?? 'swordsman';
+    const SIC: Record<string, [string, string]> = { swordsman: ['spiral', 'CLEAVE'], assassin: ['m_echo', 'STEP'], mage: ['burst', 'NOVA'], archer: ['wave', 'STORM'], guardian: ['shield', 'BULWARK'], summoner: ['el_light', 'LEGION'] };
+    const [ic, lbl] = SIC[cls] ?? SIC.swordsman;
+    this.specialBtn.querySelector('.sic')!.innerHTML = icon(ic, 'lg');
+    this.specialBtn.querySelector('.lbl')!.textContent = lbl;
     this.update(scene);
   }
 
@@ -230,6 +235,7 @@ export class Hud {
     if (p) {
       const sp = Math.max(0, p.specialCd / st.abilityCooldown);
       this.specialBtn.querySelector<HTMLElement>('.cd')!.style.setProperty('--p', sp * 100 + '%');
+      this.specialBtn.querySelector('.cdnum')!.textContent = p.specialCd > 0 ? String(Math.ceil(p.specialCd)) : '';
       const sReady = sp <= 0;
       this.specialBtn.classList.toggle('cooling', !sReady);
       if (sReady && !this.specialReady) {

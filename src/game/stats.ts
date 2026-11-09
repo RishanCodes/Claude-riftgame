@@ -75,7 +75,7 @@ export function applyMods(base: Stats, mods: StatMod[]): Stats {
   out.critChance = Math.min(1, Math.max(0, out.critChance));
   out.attackSpeed = Math.min(6, Math.max(0.4, out.attackSpeed));
   out.dodgeCooldown = Math.max(0.3, out.dodgeCooldown);
-  out.abilityCooldown = Math.max(1.5, out.abilityCooldown);
+  out.abilityCooldown = Math.max(2.5, out.abilityCooldown);
   out.moveSpeed = Math.min(320, out.moveSpeed);
   out.maxHp = Math.max(1, Math.round(out.maxHp));
   out.lifesteal = Math.min(0.25, out.lifesteal);

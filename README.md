@@ -79,6 +79,30 @@ Design decisions:
 - **Procedural art with a shared outline pass**, so everything (characters, enemies, bosses,
   props, UI icons) has one cohesive pixel-art style without external assets.
 
+## RIFTBOUND 3.0 — quality & balance
+
+- **Saving**: local save (localStorage) with a rotating backup and corruption recovery, plus a
+  **cloud save** in the artifact's private per-user database when opened on claude.ai (newest save wins
+  on startup, so progress follows your account between devices). Backup codes can be exported/imported
+  in Settings. Saves happen after every purchase, upgrade, rank-up, room and on app switch.
+- **Resumable runs**: a checkpoint is written at the start of every room, after every cleared room, after
+  chests/shrines/events, and HP/time every 8s. Reopening offers *Continue Run* (resumes at the start of the
+  current room, or after it if already cleared) or *New Run* (with confirmation; the abandoned run's gold,
+  shards and loot are kept).
+- **Audio**: suspends cleanly when the app is hidden, resumes on return, rebuilds a killed audio context,
+  never stacks duplicate music, and shows *Tap to resume sound* when the browser blocks auto-resume.
+- **UI**: redesigned village hub (hero banner, Continue Run card, building grid, save status), back
+  navigation on every screen, tabbed Equipment Hall (Equipped / Inventory) with an item drawer
+  (Details+Compare / Rank Up), hero carousel with strengths/weaknesses, forge and shop drawers, Guild
+  records tab, combat HUD with per-hero special labels and cooldown numbers.
+- **Balance**: measured with automated benchmarks that run the real combat code (see below).
+
+### Balance testing tools
+
+`window.__simSteps = N` fast-forwards the real simulation in fixed 33ms substeps. The scripts used for the
+3.0 balance pass drive the game with a scripted pilot through identical loadouts and encounters per hero
+and record time-to-clear and HP lost per minute, plus a 20-second training-dummy DPS test for every weapon.
+
 ## RIFTBOUND 2.0 additions
 
 - **Six playable heroes** (Hero Hall in the village; switch between runs, each hero remembers its weapon):
@@ -144,7 +168,6 @@ Design decisions:
 ## Not yet implemented / planned
 
 - Per-class bespoke dodge animations (all heroes share the roll) and unique hero idle animations.
-- Mid-run save/resume (closing the browser mid-run loses that run; meta progress is saved).
 - Hand-drawn art and composed music (currently procedural), sprite-sheet animation beyond
   2–4 frames, boss intro cinematics.
 - More content: additional biomes/enemies/bosses, more events, item sets, daily challenges.

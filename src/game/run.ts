@@ -5,7 +5,7 @@ import { MUTATIONS, type MutationDef } from '../data/mutations';
 import { ELEMENT_LIST } from '../data/elements';
 import { generateItem, rollRarity } from '../data/items';
 import { computeStats } from './stats';
-import type { SaveData } from '../core/save';
+import type { SaveData, RunSnapshot } from '../core/save';
 
 export const ACTS = 3;
 export const LAYERS_PER_ACT = 6; // layer 0 start, 1-4 mixed, 5 boss
@@ -119,6 +119,8 @@ export class RunState {
   stats!: Stats;
   powers: Record<string, number> = {};
   newReactions: string[] = [];
+  roomDone = false;
+  usedNodes: number[] = [];
 
   constructor(save: SaveData) {
     this.save = save;
@@ -161,7 +163,7 @@ export class RunState {
   /** Difficulty multipliers for enemies in the current room. */
   difficulty(): { hp: number; dmg: number; speed: number } {
     const d = this.depth;
-    const actHp = [1, 1.3, 1.7][this.act] ?? 1.7;
+    const actHp = [1, 1.25, 1.55][this.act] ?? 1.55;
     const actDmg = [1, 1.25, 1.5][this.act] ?? 1.5;
     let hp = (1 + d * 0.06) * actHp * (1 + (this.tier - 1) * 0.35);
     const dmg = (1 + d * 0.03) * actDmg * (1 + (this.tier - 1) * 0.2);
@@ -223,7 +225,7 @@ export class RunState {
   rollItem(minRarity: Rarity = 0, luckBonus = 0): Item {
     const luck = this.act * 0.8 + (this.tier - 1) * 0.5 + luckBonus;
     const rarity = rollRarity(luck, minRarity);
-    const item = generateItem({ rarity, tier: Math.min(2, this.act + (chance(0.25) ? 1 : 0)), cls: this.save.selectedClass });
+    const item = generateItem({ rarity, tier: Math.min(2, this.act + (chance(0.25) ? 1 : 0)), cls: this.save.selectedClass, owned: new Set(this.save.inventory.map((i) => i.base)) });
     return item;
   }
 
@@ -235,10 +237,50 @@ export class RunState {
   advanceAct(): boolean {
     if (this.act >= ACTS - 1) return false;
     this.act++;
+    this.usedNodes = [];
+    this.roomDone = false;
     this.map = generateActMap(this.act);
     this.nodeId = 0;
     this.map.nodes[0].visited = true;
     return true;
+  }
+
+  snapshot(roomDone: boolean): RunSnapshot {
+    return {
+      cls: this.save.selectedClass, tier: this.tier, act: this.act, map: JSON.parse(JSON.stringify(this.map)), nodeId: this.nodeId,
+      roomsCleared: this.roomsCleared, hp: this.hp, blessings: { ...this.blessings }, mutations: { ...this.mutations },
+      extraMods: this.extraMods.map((m) => ({ ...m })), elementOrder: [...this.elementOrder], gold: this.gold, shards: this.shards,
+      kills: this.kills, elapsed: this.elapsed, itemIds: this.itemsFound.map((i) => i.id), bossesSlain: [...this.bossesSlain],
+      rerolls: this.rerolls, phoenixUsed: this.phoenixUsed, mutationPending: this.mutationPending, roomDone, usedNodes: [...this.usedNodes],
+    };
+  }
+
+  /** Rebuild a run from a checkpoint (resumes at the start of the saved room, or after it if it was cleared). */
+  static restore(save: SaveData, sn: RunSnapshot): RunState {
+    const r = new RunState(save);
+    r.tier = sn.tier;
+    r.act = sn.act;
+    r.map = sn.map;
+    r.nodeId = sn.nodeId;
+    r.roomsCleared = sn.roomsCleared;
+    r.blessings = { ...sn.blessings };
+    r.mutations = { ...sn.mutations };
+    r.extraMods = sn.extraMods.map((m) => ({ ...m }));
+    r.elementOrder = [...sn.elementOrder];
+    r.gold = sn.gold;
+    r.shards = sn.shards;
+    r.kills = sn.kills;
+    r.elapsed = sn.elapsed;
+    r.itemsFound = save.inventory.filter((i) => sn.itemIds.includes(i.id));
+    r.bossesSlain = [...sn.bossesSlain];
+    r.rerolls = sn.rerolls;
+    r.phoenixUsed = sn.phoenixUsed;
+    r.mutationPending = sn.mutationPending;
+    r.roomDone = sn.roomDone;
+    r.usedNodes = [...(sn.usedNodes ?? [])];
+    r.recompute();
+    r.hp = Math.max(1, Math.min(r.stats.maxHp, sn.hp));
+    return r;
   }
 
   summary(victory: boolean): RunSummary {

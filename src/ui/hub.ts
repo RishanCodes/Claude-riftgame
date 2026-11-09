@@ -6,7 +6,7 @@ import { CLASSES } from '../data/classes';
 import { ENEMIES } from '../data/enemies';
 import { BOSSES } from '../data/bosses';
 import { ELEMENTS, ELEMENT_LIST, REACTIONS } from '../data/elements';
-import { BASES, MAX_ITEM_LEVEL, POWERS, RARITY, generateItem, rollRarity, salvageValue, statLabel, upgradeCost, getBase } from '../data/items';
+import { BASES, MAX_ITEM_LEVEL, POWERS, RARITY, generateItem, rollRarity, salvageValue, statLabel, upgradeCost, getBase, itemMainMods, formatMod } from '../data/items';
 import { LORE, TALENTS } from '../data/meta';
 import { BIOMES } from '../data/biomes';
 import { MUTATIONS } from '../data/mutations';
@@ -14,13 +14,15 @@ import { icon } from '../game/icons';
 import { computeStats, equippedItems, powerScore } from '../game/stats';
 import { confirmDialog, el, esc, fmtTime, onAct, uiRoot } from './dom';
 import { compareHTML, discoverItem, itemDetailsHTML, itemTile, SLOT_NAMES, starStr } from './itemview';
-import { stacks, canRankUp, rankUp, protectedIds, weaponClass } from '../game/inventory';
+import { stacks, canRankUp, rankUp, protectedIds, weaponClass, type Stack } from '../game/inventory';
+import { Cloud } from '../core/cloud';
+import { exportSave, importSave } from '../core/save';
 import { category, MAX_STARS, rankBonusText, rankCost, stackKey, starsOf } from '../data/items';
 import { getClass } from '../data/classes';
 import { selectClass } from '../core/save';
 
-type Flow = { startRun: () => void };
-let flow: Flow = { startRun: () => {} };
+type Flow = { startRun: () => void; continueRun: () => boolean; forfeitRun: () => unknown };
+let flow: Flow = { startRun: () => {}, continueRun: () => false, forfeitRun: () => null };
 export function bindHubFlow(f: Flow) {
   flow = f;
 }
@@ -35,14 +37,65 @@ function chips(): string {
     <span class="chip" title="Renown level">${icon('star', 'sm')} Lv ${r.level}</span>`;
 }
 
-function sheet(title: string, iconName: string, body: string, foot = ''): HTMLElement {
+function sheet(title: string, iconName: string, body: string, foot = '', tabs = ''): HTMLElement {
   const s = el(`<div class="sheet"><div class="sheet-inner panel">
-    <div class="sheet-head">${icon(iconName, 'md')}<h2>${title}</h2><div class="row" data-r="chips">${chips()}</div></div>
+    <div class="sheet-head"><button class="icon-btn back" data-act="close" aria-label="Back">‹</button>${icon(iconName, 'md')}<h2>${title}</h2><div class="row" data-r="chips">${chips()}</div></div>
+    ${tabs ? `<div class="tabs">${tabs}</div>` : ''}
     <div class="sheet-body">${body}</div>${foot ? `<div class="sheet-foot">${foot}</div>` : ''}
-    <div class="sheet-foot"><button class="btn block" data-act="close">Back to Village</button></div>
   </div></div>`);
   uiRoot().appendChild(s);
   return s;
+}
+
+const tabBtns = (list: [string, string][], cur: string) => list.map(([k, n]) => `<div class="tab ${k === cur ? 'on' : ''}" data-act="tab-${k}">${n}</div>`).join('');
+
+/** Bottom drawer for one item, with Details / Rank / Forge tabs and action buttons. */
+function itemDrawer(it: Item, opts: { tabs: ('details' | 'rank' | 'forge')[]; tab?: string; actions: string; body?: (tab: string) => string; anim?: boolean; onAct: (act: string, d: HTMLElement) => void }): HTMLElement {
+  const r = RARITY[it.rarity];
+  let tab = opts.tab ?? opts.tabs[0];
+  const d = el(`<div class="drawer"><div class="drawer-panel panel" style="border-color:${r.color}"></div></div>`);
+  const panel = d.querySelector<HTMLElement>('.drawer-panel')!;
+  const names: Record<string, string> = { details: 'Details', rank: 'Rank Up', forge: 'Forge' };
+  const render = () => {
+    panel.innerHTML = `<div class="drawer-grip" data-act="x"></div>
+      ${opts.tabs.length > 1 ? `<div class="tabs inner">${opts.tabs.map((t) => `<div class="tab ${t === tab ? 'on' : ''}" data-act="dt-${t}">${names[t]}</div>`).join('')}</div>` : ''}
+      <div class="drawer-body item-card ${opts.anim ? 'rankup' : ''}" style="max-width:none">${opts.anim ? '<div class="starburst">★</div>' : ''}${opts.body ? opts.body(tab) : ''}</div>
+      <div class="drawer-actions">${opts.actions}<button class="btn ghost" data-act="x">Close</button></div>`;
+    opts.anim = false;
+  };
+  render();
+  d.addEventListener('click', (e) => {
+    if (e.target === d) d.remove();
+  });
+  onAct(d, (act) => {
+    if (act === 'x') return void d.remove();
+    if (act.startsWith('dt-')) {
+      tab = act.slice(3);
+      audio.play('ui');
+      return render();
+    }
+    opts.onAct(act, d);
+  });
+  uiRoot().appendChild(d);
+  return d;
+}
+
+function cloudLabel(): [string, string] {
+  if (Cloud.status === 'online') return ['☁ Cloud save', 'ok'];
+  if (Cloud.status === 'connecting') return ['☁ Connecting…', ''];
+  return ['💾 Device save', ''];
+}
+
+function rankPanel(st: Stack): string {
+  const it = st.rep;
+  const stars = starsOf(it);
+  if (stars >= MAX_STARS) return `<div class="big-stars">★★★★★</div><div class="center gold-text">Maximum rank reached</div><ul>${rankBonusText(it.slot, 5).map((t) => `<li class="rank-li">${esc(t)}</li>`).join('')}</ul>`;
+  const need = rankCost(stars);
+  return `<div class="big-stars">${starStr(stars)}</div>
+    <div class="center" style="margin:6px 0">Copies owned <b>${st.items.length}</b> · Spare copies <b class="${st.spares.length >= need ? 'good' : 'bad'}">${st.spares.length} / ${need}</b></div>
+    <div class="section-title">${'★'.repeat(stars + 1)} unlocks</div>
+    <ul>${rankBonusText(it.slot, stars + 1).map((t) => `<li class="rank-li">${esc(t)}</li>`).join('')}</ul>
+    <div class="muted" style="font-size:13px;margin-top:6px">Ranking up consumes ${need} spare cop${need > 1 ? 'ies' : 'y'}. Equipped items, saved hero weapons and ranked copies are never consumed. Rarity stays ${RARITY[it.rarity].name}.</div>`;
 }
 
 function closeSheet(s: HTMLElement) {
@@ -64,6 +117,8 @@ export const HubUI = {
         audio.play('ui');
         switch (act) {
           case 'portal': return this.portal();
+          case 'continue': return this.doContinue();
+          case 'newrun': return void this.newRunConfirm();
           case 'smith': return this.smith();
           case 'hall': return this.hall();
           case 'guild': return this.guild();
@@ -77,6 +132,7 @@ export const HubUI = {
     this.ensureMerchantStock();
     this.refresh();
     this.root.classList.add('on');
+    if (App.save.activeRun && !document.querySelector('.resume-prompt')) this.resumePrompt();
     if (!App.save.tutorial['welcome']) {
       App.save.tutorial['welcome'] = true;
       App.persist();
@@ -94,18 +150,57 @@ export const HubUI = {
     const newItems = s.inventory.some((i) => i.isNew) || stacks(s).some(canRankUp);
     const affordableTalent = TALENTS.some((t) => (s.talents[t.id] ?? 0) < t.max && s.shards >= t.cost(s.talents[t.id] ?? 0));
     const ps = powerScore(computeStats(s).stats);
+    const cls = getClass(s.selectedClass);
+    const ar = s.activeRun;
+    const cloud = cloudLabel();
     this.root.innerHTML = `
-      <div class="topbar">${chips()}<div class="grow"></div><button class="icon-btn" data-act="settings" aria-label="Settings">${icon('gear', 'md')}</button></div>
+      <div class="topbar">${chips()}<div class="grow"></div><span class="save-pill ${cloud[1]}">${cloud[0]}</span><button class="icon-btn" data-act="settings" aria-label="Settings">${icon('gear', 'md')}</button></div>
       <div class="logo"><h1>RIFTBOUND</h1><div class="tag">Emberfall Village</div></div>
-      <div class="hub-grid">
-        <div class="bld panel portal-btn" data-act="portal">${icon('b_portal', 'xl')}<div style="text-align:left"><div class="nm">Rift Portal</div><div class="sub">Enter the rift · Tier ${s.tier} · Power ${ps}</div></div><span class="shine"></span></div>
-        <div class="bld panel" data-act="hall">${icon('b_hall', 'lg')}<div class="nm">Equipment Hall</div><div class="sub">${s.inventory.length} items</div>${newItems ? '<span class="dot"></span>' : ''}</div>
-        <div class="bld panel" data-act="smith">${icon('b_smith', 'lg')}<div class="nm">Blacksmith</div><div class="sub">Upgrade gear</div></div>
-        <div class="bld panel" data-act="guild">${icon('b_guild', 'lg')}<div class="nm">Adventurer Guild</div><div class="sub">Talents</div>${affordableTalent ? '<span class="dot"></span>' : ''}</div>
-        <div class="bld panel" data-act="merchant">${icon('b_merchant', 'lg')}<div class="nm">Merchant</div><div class="sub">Buy gear</div></div>
-        <div class="bld panel" data-act="codex">${icon('b_codex', 'lg')}<div class="nm">Codex</div><div class="sub">Lore & bestiary</div></div>
-        <div class="bld panel" data-act="heroes"><img class="px-icon lg" src="${spriteUrl('pl_' + s.selectedClass + '_0')}" style="height:52px;width:46px"><div class="nm">Hero Hall</div><div class="sub">${getClass(s.selectedClass).name}</div></div>
+      <div class="hub-main">
+        <div class="hero-banner panel" data-act="heroes" style="--hc:${cls.color}">
+          <img src="${spriteUrl('pl_' + cls.id + '_0')}" alt="">
+          <div class="grow"><div class="eyebrow">Your hero</div><div class="nm" style="color:${cls.color}">${cls.name}</div><div class="sub">Power ${ps} · Tier ${s.tier}</div></div>
+          <span class="chev">Change ›</span>
+        </div>
+        ${ar ? `<div class="bld panel portal-btn" data-act="continue">${icon('b_portal', 'xl')}<div style="text-align:left"><div class="nm">Continue Run</div><div class="sub">${getClass(ar.cls).name} · ${BIOMES[ar.act].name} · Room ${(ar.map.nodes[ar.nodeId]?.layer ?? 0) + 1}/6 · ${fmtTime(ar.elapsed)}</div></div><span class="shine"></span></div>
+          <button class="btn small ghost" data-act="newrun">Start a new run instead</button>`
+        : `<div class="bld panel portal-btn" data-act="portal">${icon('b_portal', 'xl')}<div style="text-align:left"><div class="nm">Enter the Rift</div><div class="sub">Three Acts · Tier ${s.tier}</div></div><span class="shine"></span></div>`}
+        <div class="hub-grid">
+          <div class="bld panel" data-act="hall">${icon('b_hall', 'lg')}<div class="nm">Equipment</div><div class="sub">${stacks(s).length} kinds</div>${newItems ? '<span class="dot"></span>' : ''}</div>
+          <div class="bld panel" data-act="smith">${icon('b_smith', 'lg')}<div class="nm">Blacksmith</div><div class="sub">Forge gear</div></div>
+          <div class="bld panel" data-act="merchant">${icon('b_merchant', 'lg')}<div class="nm">Merchant</div><div class="sub">${s.merchant.stock.length} wares</div></div>
+          <div class="bld panel" data-act="guild">${icon('b_guild', 'lg')}<div class="nm">Guild</div><div class="sub">Talents</div>${affordableTalent ? '<span class="dot"></span>' : ''}</div>
+          <div class="bld panel" data-act="codex">${icon('b_codex', 'lg')}<div class="nm">Codex</div><div class="sub">Lore</div></div>
+          <div class="bld panel" data-act="heroes"><img class="px-icon lg" src="${spriteUrl('pl_' + s.selectedClass + '_0')}" style="height:46px;width:40px"><div class="nm">Hero Hall</div><div class="sub">6 heroes</div></div>
+        </div>
       </div>`;
+  },
+
+  resumePrompt() {
+    const ar = App.save.activeRun;
+    if (!ar) return;
+    const s = el(`<div class="screen resume-prompt"><div class="spacer"></div>
+      <div class="panel" style="padding:20px;max-width:380px;width:100%">
+        <h2 class="center" style="font-size:22px">Unfinished Adventure</h2>
+        <p class="center muted" style="line-height:1.4">${getClass(ar.cls).name} · Act ${ar.act + 1}, ${BIOMES[ar.act].name} · ${ar.roomsCleared} rooms cleared · ${Math.floor(ar.gold)} gold carried</p>
+        <p class="center" style="font-size:14px;line-height:1.4">Continuing resumes at the start of the room you were in${ar.roomDone ? ' (already cleared)' : ''}.</p>
+        <div class="col"><button class="btn primary block" data-act="continue">Continue Run</button><button class="btn block" data-act="later">Not now</button></div>
+      </div><div class="spacer"></div></div>`);
+    uiRoot().appendChild(s);
+    onAct(s, (act) => {
+      audio.unlock();
+      audio.play('ui');
+      s.remove();
+      if (act === 'continue') this.doContinue();
+    });
+  },
+
+  doContinue() {
+    if (!flow.continueRun()) {
+      this.refresh();
+      return;
+    }
+    audio.play('door');
   },
 
   welcome() {
@@ -123,6 +218,17 @@ export const HubUI = {
       audio.play('ui');
       s.remove();
     });
+  },
+
+  async newRunConfirm() {
+    const ar = App.save.activeRun;
+    if (ar) {
+      const ok = await confirmDialog('Abandon unfinished run?', `Your current ${getClass(ar.cls).name} run (Act ${ar.act + 1}) will end as if you had fallen. You keep its ${Math.floor(ar.gold)} gold, ${ar.shards} shards and all loot found.`, 'Abandon & start new');
+      if (!ok) return;
+      flow.forfeitRun();
+      App.persist();
+    }
+    this.portal();
   },
 
   // ───────────────────────── Rift Portal ─────────────────────────
@@ -165,6 +271,10 @@ export const HubUI = {
         this.portal();
       }
       if (act === 'go') {
+        if (s.activeRun) {
+          sh.remove();
+          return void this.newRunConfirm();
+        }
         audio.unlock();
         audio.play('door');
         sh.remove();
@@ -174,141 +284,188 @@ export const HubUI = {
     });
   },
 
-  // ───────────────────────── Hero Hall (class selection) ─────────────────────────
-  heroes() {
+  // ───────────────────────── Hero Hall (carousel) ─────────────────────────
+  heroes(idx = CLASSES.findIndex((c) => c.id === App.save.selectedClass)) {
     const s = App.save;
+    const c = CLASSES[(idx + CLASSES.length) % CLASSES.length];
+    const sel = s.selectedClass === c.id;
+    const locked = !!s.activeRun;
     const bar = (n: number) => `<span class="bar5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
-    const body = `<div class="flavor">Choose who walks into the rift. You can switch heroes between runs; each hero remembers its own weapon.</div>
-      <div class="list">${CLASSES.map((c) => `<div class="li panel hero-card ${s.selectedClass === c.id ? 'sel' : ''}" style="--hc:${c.color}" data-act="pick-${c.id}">
-        <img src="${spriteUrl('pl_' + c.id + '_0')}" alt="">
-        <div class="grow"><div class="t" style="color:${c.color}">${c.name} <span class="muted" style="font-size:12px;font-family:var(--body)">${c.title}</span></div>
-        <div class="d">${esc(c.desc)}</div>
-        <div class="d" style="margin-top:4px"><b style="color:#fff">${c.special.name}</b> (${c.special.cooldown}s): ${esc(c.special.desc)}</div>
-        <div class="d"><b style="color:#fff">${c.passive.name}</b> (passive): ${esc(c.passive.desc)}</div>
-        <div class="bars"><span>HP</span>${bar(c.rating.hp)}<span>Damage</span>${bar(c.rating.dmg)}<span>Speed</span>${bar(c.rating.speed)}<span>Range</span>${bar(c.rating.range)}<span>Defense</span>${bar(c.rating.def)}</div>
-        ${s.selectedClass === c.id ? '<div class="chip" style="margin-top:6px">Selected</div>' : ''}</div></div>`).join('')}</div>`;
-    const sh = sheet('Hero Hall', 'b_guild', body);
+    const body = `
+      <div class="hero-strip">${CLASSES.map((h, i) => `<button class="hs ${h.id === c.id ? 'on' : ''} ${h.id === s.selectedClass ? 'cur' : ''}" style="--hc:${h.color}" data-act="go-${i}"><img src="${spriteUrl('pl_' + h.id + '_0')}" alt="${h.name}"></button>`).join('')}</div>
+      <div class="hero-stage" style="--hc:${c.color}">
+        <button class="icon-btn nav" data-act="go-${idx - 1}" aria-label="Previous">‹</button>
+        <img class="hero-big" src="${spriteUrl('pl_' + c.id + '_' + 0)}" alt="">
+        <button class="icon-btn nav" data-act="go-${idx + 1}" aria-label="Next">›</button>
+      </div>
+      <div class="center"><div class="hero-name" style="color:${c.color}">${c.name}</div><div class="muted">${c.title}</div></div>
+      <p class="hero-desc">${esc(c.desc)}</p>
+      <div class="hero-cols">
+        <div class="panel pc"><div class="section-title">Strengths</div><ul>${(c.pros ?? []).map((t) => `<li class="good">+ ${esc(t)}</li>`).join('')}</ul></div>
+        <div class="panel pc"><div class="section-title">Weaknesses</div><ul>${(c.cons ?? []).map((t) => `<li class="bad">− ${esc(t)}</li>`).join('')}</ul></div>
+      </div>
+      <div class="panel ability" style="--hc:${c.color}"><div class="eyebrow">Active · ${c.special.cooldown}s cooldown</div><div class="t">${c.special.name}</div><div class="d">${esc(c.special.desc)}</div></div>
+      <div class="panel ability" style="--hc:${c.color}"><div class="eyebrow">Passive</div><div class="t">${c.passive.name}</div><div class="d">${esc(c.passive.desc)}</div></div>
+      <div class="bars big" style="--hc:${c.color}"><span>Health</span>${bar(c.rating.hp)}<span>Damage</span>${bar(c.rating.dmg)}<span>Speed</span>${bar(c.rating.speed)}<span>Range</span>${bar(c.rating.range)}<span>Defense</span>${bar(c.rating.def)}</div>`;
+    const foot = sel
+      ? `<button class="btn block disabled">${c.name} selected</button>`
+      : locked
+        ? `<button class="btn block disabled">Finish or abandon your current run to switch</button>`
+        : `<button class="btn primary block" data-act="pick">Play as ${c.name}</button>`;
+    const sh = sheet('Hero Hall', 'b_guild', body, foot);
+    let sx = 0;
+    const stage = sh.querySelector<HTMLElement>('.hero-stage')!;
+    stage.addEventListener('pointerdown', (e) => (sx = e.clientX));
+    stage.addEventListener('pointerup', (e) => {
+      const dx = e.clientX - sx;
+      if (Math.abs(dx) > 40) {
+        sh.remove();
+        this.heroes(idx + (dx < 0 ? 1 : -1));
+      }
+    });
     onAct(sh, (act) => {
       if (act === 'close') return closeSheet(sh);
-      if (act.startsWith('pick-')) {
-        const id = act.slice(5);
-        if (id !== s.selectedClass) {
-          selectClass(s, id);
-          App.persist();
-          audio.play('blessing');
-        }
-        const top = sh.querySelector('.sheet-body')!.scrollTop;
+      if (act.startsWith('go-')) {
+        audio.play('ui');
         sh.remove();
-        this.heroes();
-        uiRoot().querySelector('.sheet .sheet-body')!.scrollTop = top;
+        return this.heroes(Number(act.slice(3)));
+      }
+      if (act === 'pick' && !s.activeRun) {
+        selectClass(s, c.id);
+        App.persist();
+        audio.play('blessing');
+        sh.remove();
+        this.heroes(idx);
       }
     });
   },
 
   // ───────────────────────── Equipment Hall ─────────────────────────
-  hall(filter = 'all', selKey: string | null = null, sort = 'rarity', anim = false) {
+  hall(tab = 'equipped', filter = 'all', sort = 'rarity') {
     const s = App.save;
     const eq = equippedItems(s);
     const st = computeStats(s).stats;
-    const cat = (sl: Slot) => category(sl);
-    let list = stacks(s).filter((g) => {
-      const sl = g.rep.slot;
-      if (filter === 'all') return true;
-      if (filter === 'upgrade') return canRankUp(g);
-      if (filter === 'weapon') return sl === 'weapon';
-      if (filter === 'mine') return sl !== 'weapon' || weaponClass(g.rep) === s.selectedClass;
-      return cat(sl) === filter;
-    });
-    list = list.sort((a, b) =>
-      sort === 'stars' ? starsOf(b.rep) - starsOf(a.rep) || b.rep.rarity - a.rep.rarity
-        : sort === 'new' ? Number(!!b.items.some((i) => i.isNew)) - Number(!!a.items.some((i) => i.isNew)) || b.rep.rarity - a.rep.rarity
-          : b.rep.rarity - a.rep.rarity || starsOf(b.rep) - starsOf(a.rep) || a.rep.slot.localeCompare(b.rep.slot));
-    const sel = selKey ? stacks(s).find((g) => g.key === selKey) : undefined;
-    const equippedIds = new Set(Object.values(s.equipped).filter(Boolean));
-    let detail = '';
-    if (sel) {
-      const it = sel.rep;
-      const stars = starsOf(it);
-      const need = rankCost(stars);
-      const usable = it.slot !== 'weapon' || weaponClass(it) === s.selectedClass;
-      const isEq = equippedIds.has(it.id);
-      const rank = stars >= MAX_STARS
-        ? `<div class="big-stars">★★★★★</div><div class="center gold-text">Maximum rank</div>`
-        : `<div class="big-stars">${starStr(stars)}</div>
-          <div class="center" style="font-size:13px">Copies owned: <b>${sel.items.length}</b> · spare copies <b class="${sel.spares.length >= need ? 'good' : 'bad'}">${sel.spares.length}/${need}</b> needed for ${'★'.repeat(stars + 1)}</div>
-          <div class="section-title" style="margin:8px 0 2px">Next rank</div><ul>${rankBonusText(it.slot, stars + 1).map((t) => `<li class="rank-li">${esc(t)}</li>`).join('')}</ul>
-          <button class="btn gold block ${canRankUp(sel) ? '' : 'disabled'}" data-act="rank">Rank Up · consume ${need} cop${need > 1 ? 'ies' : 'y'}</button>
-          <div class="muted" style="font-size:12px;margin-top:4px">Equipped and ranked copies are never consumed. Rarity stays ${RARITY[it.rarity].name}.</div>`;
-      detail = `<div class="panel detail item-card ${anim ? 'rankup' : ''}" style="max-width:none;border-color:${RARITY[it.rarity].color};position:relative">${anim ? '<div class="starburst">★</div>' : ''}${itemDetailsHTML(it)}${compareHTML(it)}
-        <div class="row" style="margin-top:10px">
-          ${isEq ? `<button class="btn grow" data-act="unequip">Unequip</button>` : `<button class="btn primary grow ${usable ? '' : 'disabled'}" data-act="equip">${usable ? 'Equip' : getClass(weaponClass(it)!).name + ' only'}</button>`}
-          <button class="btn danger grow ${sel.spares.length || (!isEq && sel.items.length === 1 && !protectedIds(s).has(it.id)) ? '' : 'disabled'}" data-act="salvage">Salvage ${sel.spares.length ? 'a spare' : ''}</button>
+    const all = stacks(s);
+    let body = '';
+    if (tab === 'equipped') {
+      body = `<div class="statgrid panel" style="padding:10px">
+          <div><span class="muted">Hero</span><span style="color:${getClass(s.selectedClass).color}">${getClass(s.selectedClass).name}</span></div><div><span class="muted">Power</span><span class="gold-text">${powerScore(st)}</span></div>
+          <div><span class="muted">Max HP</span><span>${st.maxHp}</span></div><div><span class="muted">Damage</span><span>${st.damage.toFixed(0)}</span></div>
+          <div><span class="muted">Atk Speed</span><span>${st.attackSpeed.toFixed(2)}/s</span></div><div><span class="muted">Armor</span><span>${st.armor.toFixed(0)}</span></div>
+          <div><span class="muted">Crit</span><span>${Math.round(st.critChance * 100)}% · x${st.critDamage.toFixed(1)}</span></div><div><span class="muted">Move</span><span>${st.moveSpeed.toFixed(0)}</span></div>
         </div>
-        <div class="rank-panel">${rank}</div></div>`;
+        <div class="section-title">Equipped gear</div>
+        <div class="list">${SLOTS.map((sl) => {
+          const it = eq[sl];
+          const g = it ? all.find((x) => x.key === stackKey(it)) : undefined;
+          return `<div class="li panel eq-row" data-act="${it ? 'open' : 'pickslot'}" data-key="${it ? stackKey(it) : ''}" data-slot="${sl}">${itemTile(it, '', '', sl)}
+            <div class="grow">${it ? `<div class="t" style="color:${RARITY[it.rarity].color}">${esc(it.name)}${it.level ? ' +' + it.level : ''}</div><div class="d">${RARITY[it.rarity].name} · <span class="gold-text">${'★'.repeat(starsOf(it))}</span>${g && canRankUp(g) ? ' · <b class="good">Can rank up</b>' : ''}</div>` : `<div class="t muted">Empty ${SLOT_NAMES[sl]}</div><div class="d">Tap to choose</div>`}</div><span class="chev">›</span></div>`;
+        }).join('')}</div>`;
+    } else {
+      let list = all.filter((g) => {
+        const sl = g.rep.slot;
+        if (filter === 'all') return true;
+        if (filter === 'upgrade') return canRankUp(g);
+        if (filter === 'mine') return sl !== 'weapon' || weaponClass(g.rep) === s.selectedClass;
+        if (filter === 'weapon') return sl === 'weapon';
+        if (filter === 'new') return g.items.some((i) => i.isNew);
+        return category(sl) === filter;
+      });
+      list = list.sort((a, b) =>
+        sort === 'stars' ? starsOf(b.rep) - starsOf(a.rep) || b.rep.rarity - a.rep.rarity
+          : sort === 'slot' ? SLOTS.indexOf(a.rep.slot) - SLOTS.indexOf(b.rep.slot) || b.rep.rarity - a.rep.rarity
+            : b.rep.rarity - a.rep.rarity || starsOf(b.rep) - starsOf(a.rep));
+      const equippedIds = new Set(Object.values(s.equipped).filter(Boolean));
+      const filters: [string, string][] = [['all', 'All'], ['mine', 'Usable'], ['weapon', 'Weapons'], ['armor', 'Armor'], ['accessory', 'Accessories'], ['upgrade', 'Rank up ▲'], ['new', 'New']];
+      body = `<div class="filters scroller">${filters.map(([k, n]) => `<button class="btn ghost ${filter === k ? 'on' : ''}" data-act="f-${k}">${n}</button>`).join('')}</div>
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><span class="muted" style="font-size:13px">${list.length} of ${all.length} · ${s.inventory.length} items</span>
+        <button class="btn small ghost" data-act="sort">Sort: ${sort === 'rarity' ? 'Rarity' : sort === 'stars' ? 'Rank' : 'Slot'}</button></div>
+        ${list.length ? `<div class="inv big">${list.map((g) => itemTile(g.rep, '', 'open', '', g.items.length, canRankUp(g)).replace('data-act="open"', `data-act="open" data-key="${g.key}"`).replace('</div>', g.items.some((i) => equippedIds.has(i.id)) ? '<span class="eq">E</span></div>' : '</div>')).join('')}</div>` : '<div class="empty">Nothing matches this filter.</div>'}
+        <div class="legend-row"><span><b>×N</b> copies</span><span><b class="good">▲</b> can rank up</span><span><b class="gold-text">E</b> equipped</span><span><b>S/A/M…</b> hero weapon</span></div>`;
     }
-    const filters: [string, string][] = [['all', 'All'], ['mine', 'Usable'], ['weapon', 'Weapons'], ['armor', 'Armor'], ['accessory', 'Accessories'], ['upgrade', 'Can rank up']];
-    const body = `
-      <div class="slots">${SLOTS.map((sl) => itemTile(eq[sl], '', 'slot-' + sl, sl)).join('')}</div>
-      <div class="statgrid" style="margin-top:10px">
-        <div><span class="muted">Hero</span><span style="color:${getClass(s.selectedClass).color}">${getClass(s.selectedClass).name}</span></div><div><span class="muted">Power</span><span class="gold-text">${powerScore(st)}</span></div>
-        <div><span class="muted">Max HP</span><span>${st.maxHp}</span></div><div><span class="muted">Damage</span><span>${st.damage.toFixed(0)}</span></div>
-        <div><span class="muted">Atk Speed</span><span>${st.attackSpeed.toFixed(2)}</span></div><div><span class="muted">Armor</span><span>${st.armor.toFixed(0)}</span></div>
-      </div>
-      ${detail}
-      <div class="section-title">Inventory <span class="muted">(${s.inventory.length} items · ${list.length} shown)</span></div>
-      <div class="filters">${filters.map(([k, n]) => `<button class="btn ghost ${filter === k ? 'on' : ''}" data-act="f-${k}">${n}</button>`).join('')}
-        <button class="btn ghost" data-act="sort">Sort: ${sort === 'rarity' ? 'Rarity' : sort === 'stars' ? 'Rank' : 'New'}</button></div>
-      ${list.length ? `<div class="inv">${list.map((g) => itemTile(g.rep, (sel?.key === g.key ? 'sel ' : '') + (g.items.some((i) => i.isNew) ? '' : ''), 'item', '', g.items.length, canRankUp(g)).replace('data-act="item"', `data-act="item" data-key="${g.key}"`).replace('</div>', g.items.some((i) => equippedIds.has(i.id)) ? '<span class="eq">E</span></div>' : '</div>')).join('')}</div>` : '<div class="muted">Nothing here yet.</div>'}
-      <div class="muted" style="font-size:13px;margin-top:10px">Duplicates stack (×N). ▲ means a stack can rank up. Letters mark which hero can use a weapon.</div>`;
-    const sh = sheet('Equipment Hall', 'b_hall', body);
-    if (sel && sel.items.some((i) => i.isNew)) {
-      sel.items.forEach((i) => (i.isNew = false));
-      App.persist();
-    }
-    if (anim) audio.play('legendary');
+    const tabs = tabBtns([['equipped', 'Equipped'], ['inventory', 'Inventory']], tab);
+    const sh = sheet('Equipment Hall', 'b_hall', body, '', tabs);
+    const top = () => sh.querySelector('.sheet-body')!.scrollTop;
+    const rerender = (t = tab, f = filter, so = sort, keepScroll = true) => {
+      const y = top();
+      sh.remove();
+      this.hall(t, f, so);
+      if (keepScroll) uiRoot().querySelector('.sheet .sheet-body')!.scrollTop = y;
+    };
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
       audio.play('ui');
-      const top = sh.querySelector('.sheet-body')!.scrollTop;
-      const rerender = (f: string, k: string | null, so = sort, a = false) => {
-        sh.remove();
-        this.hall(f, k, so, a);
-        uiRoot().querySelector('.sheet .sheet-body')!.scrollTop = a ? 0 : top;
-      };
-      if (act.startsWith('slot-')) {
-        const it = eq[act.slice(5) as Slot];
-        return rerender(filter, it ? stackKey(it) : selKey);
-      }
-      if (act.startsWith('f-')) return rerender(act.slice(2), selKey);
-      if (act === 'sort') return rerender(filter, selKey, sort === 'rarity' ? 'stars' : sort === 'stars' ? 'new' : 'rarity');
-      if (act === 'item') return rerender(filter, t.dataset.key!);
-      if (!sel) return;
-      const it = sel.rep;
-      if (act === 'equip') {
-        if (it.slot === 'weapon' && weaponClass(it) !== s.selectedClass) return;
-        s.equipped[it.slot] = it.id;
-        if (it.slot === 'weapon') s.classWeapon[s.selectedClass] = it.id;
-        App.persist();
-        audio.play('blessing');
-        return rerender(filter, sel.key);
-      }
-      if (act === 'unequip') {
-        s.equipped[it.slot] = null;
-        if (it.slot === 'weapon') delete s.classWeapon[s.selectedClass];
-        App.persist();
-        return rerender(filter, sel.key);
-      }
-      if (act === 'rank') {
-        if (rankUp(s, sel)) {
-          App.persist();
-          return rerender(filter, sel.key, sort, true);
-        }
-      }
-      if (act === 'salvage') {
-        const target = sel.spares[0] ?? (!equippedIds.has(it.id) && sel.items.length === 1 && !protectedIds(s).has(it.id) ? it : null);
-        if (target) void this.salvage(target).then((ok) => ok && rerender(filter, sel.items.length > 1 ? sel.key : null));
+      if (act.startsWith('tab-')) return rerender(act.slice(4), filter, sort, false);
+      if (act.startsWith('f-')) return rerender(tab, act.slice(2), sort);
+      if (act === 'sort') return rerender(tab, filter, sort === 'rarity' ? 'stars' : sort === 'stars' ? 'slot' : 'rarity');
+      if (act === 'pickslot') return rerender('inventory', category(t.dataset.slot as Slot) === 'accessory' ? 'accessory' : t.dataset.slot === 'weapon' ? 'weapon' : 'armor', sort, false);
+      if (act === 'open') {
+        const g = stacks(s).find((x) => x.key === t.dataset.key);
+        if (g) this.gearDrawer(g, () => rerender());
       }
     });
+  },
+
+  /** Item drawer used by the Equipment Hall: details/compare, rank-up, equip, salvage. */
+  gearDrawer(g: Stack, onChange: () => void, tab = 'details', anim = false) {
+    const s = App.save;
+    const it = g.rep;
+    const usable = it.slot !== 'weapon' || weaponClass(it) === s.selectedClass;
+    const isEq = Object.values(s.equipped).includes(it.id);
+    const canSalvage = g.spares.length > 0 || (!isEq && g.items.length === 1 && !protectedIds(s).has(it.id));
+    const rankable = canRankUp(g);
+    const actions = `${isEq ? '<button class="btn" data-act="unequip">Unequip</button>' : `<button class="btn primary ${usable ? '' : 'disabled'}" data-act="equip">${usable ? 'Equip' : getClass(weaponClass(it)!).name + ' only'}</button>`}
+      ${starsOf(it) < MAX_STARS ? `<button class="btn gold ${rankable ? '' : 'disabled'}" data-act="rank">Rank Up</button>` : ''}
+      <button class="btn danger ${canSalvage ? '' : 'disabled'}" data-act="salvage">Salvage${g.spares.length ? ' spare' : ''}</button>`;
+    const d = itemDrawer(it, {
+      tabs: ['details', 'rank'], tab, anim, actions,
+      body: (t) => (t === 'details' ? `${itemDetailsHTML(it)}${compareHTML(it)}${g.items.length > 1 ? `<div class="center muted" style="margin-top:6px">You own ×${g.items.length} copies</div>` : ''}` : `<div class="center">${itemTile(it)}</div><div class="iname center" style="color:${RARITY[it.rarity].color}">${esc(it.name)}</div><div class="rank-panel">${rankPanel(g)}</div>`),
+      onAct: (act) => {
+        const reopen = (t2 = 'details', a = false) => {
+          d.remove();
+          onChange();
+          const g2 = stacks(s).find((x) => x.key === g.key);
+          if (g2) this.gearDrawer(g2, onChange, t2, a);
+        };
+        if (act === 'equip' && usable) {
+          s.equipped[it.slot] = it.id;
+          if (it.slot === 'weapon') s.classWeapon[s.selectedClass] = it.id;
+          g.items.forEach((i) => (i.isNew = false));
+          App.persist();
+          audio.play('blessing');
+          return reopen();
+        }
+        if (act === 'unequip') {
+          s.equipped[it.slot] = null;
+          if (it.slot === 'weapon') delete s.classWeapon[s.selectedClass];
+          App.persist();
+          return reopen();
+        }
+        if (act === 'rank') {
+          if (rankUp(s, g)) {
+            App.persist();
+            audio.play('legendary');
+            return reopen('rank', true);
+          }
+          return;
+        }
+        if (act === 'salvage') {
+          const target = g.spares[0] ?? (canSalvage ? it : null);
+          if (target)
+            void this.salvage(target).then((ok) => {
+              if (!ok) return;
+              d.remove();
+              onChange();
+              const g2 = stacks(s).find((x) => x.key === g.key);
+              if (g2) this.gearDrawer(g2, onChange);
+            });
+        }
+      },
+    });
+    if (g.items.some((i) => i.isNew)) {
+      g.items.forEach((i) => (i.isNew = false));
+      App.persist();
+    }
   },
 
   async salvage(it: Item): Promise<boolean> {
@@ -328,90 +485,82 @@ export const HubUI = {
   },
 
   // ───────────────────────── Blacksmith ─────────────────────────
-  smith(selId: string | null = null) {
+  smith() {
     const s = App.save;
-    const items = stacks(s).map((g) => g.rep).sort(RARITY_SORT);
-    const sel = selId ? s.inventory.find((i) => i.id === selId) : items.find((i) => Object.values(s.equipped).includes(i.id)) ?? items[0];
     const equippedIds = new Set(Object.values(s.equipped).filter(Boolean));
-    let detail = '<div class="muted">You have no items to upgrade.</div>';
-    if (sel) {
-      const maxed = sel.level >= MAX_ITEM_LEVEL;
-      const cost = upgradeCost(sel);
-      const can = !maxed && s.gold >= cost.gold && s.shards >= cost.shards;
-      const preview = { ...sel, level: Math.min(MAX_ITEM_LEVEL, sel.level + 1) };
-      detail = `<div class="panel detail item-card" style="max-width:none;border-color:${RARITY[sel.rarity].color}">${itemDetailsHTML(sel)}
-        ${maxed ? '<div class="gold-text center" style="margin-top:8px">Fully upgraded</div>' : `<div class="muted" style="margin-top:10px;font-size:13px">Next level: main stats +12%, affixes +5%</div>
-        <div class="section-title" style="margin-top:8px">After upgrade</div><div style="text-align:left;font-size:14px">${itemDetailsHTML(preview, false).replace(/<div class="iname[\s\S]*?<\/div>\s*<div class="irar[\s\S]*?<\/div>/, '')}</div>
-        <button class="btn gold block ${can ? '' : 'disabled'}" data-act="upgrade" style="margin-top:10px">Upgrade · ${cost.gold} ${icon('coin', 'sm')}${cost.shards ? ` ${cost.shards} ${icon('shard', 'sm')}` : ''}</button>`}
-        <button class="btn danger block ${equippedIds.has(sel.id) ? 'disabled' : ''}" data-act="salvage" style="margin-top:8px">Salvage · +${salvageValue(sel).shards} ${icon('shard', 'sm')} +${salvageValue(sel).gold} ${icon('coin', 'sm')}</button>
-        ${equippedIds.has(sel.id) ? '<div class="muted center" style="font-size:12px;margin-top:4px">Unequip to salvage</div>' : ''}
-      </div>`;
-    }
-    const body = `<div class="flavor">"Bring me rift-steel and coin, and I’ll make that blade sing." — Brannoc, Smith of Emberfall</div>
-      ${detail}
-      <div class="section-title">Select an item</div>
-      <div class="inv">${items.map((i) => itemTile(i, sel?.id === i.id ? 'sel' : '', 'item').replace('</div>', equippedIds.has(i.id) ? '<span class="eq">E</span></div>' : '</div>')).join('')}</div>`;
+    const reps = stacks(s).map((g) => g.rep).sort((a, b) => Number(equippedIds.has(b.id)) - Number(equippedIds.has(a.id)) || RARITY_SORT(a, b));
+    const body = `<div class="flavor">"Bring me coin and rift-shards, and I’ll make that steel sing." — Brannoc, Smith of Emberfall</div>
+      <div class="panel" style="padding:10px;font-size:14px;line-height:1.4">Forging raises an item’s level (up to +${MAX_ITEM_LEVEL}): <b>+12% primary stats</b> and <b>+5% bonus stats</b> per level. It stacks with star ranks from duplicates.</div>
+      <div class="section-title">Your gear · equipped first</div>
+      <div class="inv big">${reps.map((i) => itemTile(i, '', 'open').replace('</div>', equippedIds.has(i.id) ? '<span class="eq">E</span></div>' : '</div>')).join('')}</div>`;
     const sh = sheet('Blacksmith', 'b_smith', body);
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
-      if (act === 'item') {
-        audio.play('ui');
-        sh.remove();
-        return this.smith(t.dataset.id!);
-      }
-      if (act === 'upgrade' && sel) {
-        const cost = upgradeCost(sel);
-        if (s.gold < cost.gold || s.shards < cost.shards || sel.level >= MAX_ITEM_LEVEL) return;
-        s.gold -= cost.gold;
-        s.shards -= cost.shards;
-        sel.level++;
-        App.persist();
-        audio.play('chest');
-        sh.remove();
-        this.smith(sel.id);
-      }
-      if (act === 'salvage' && sel) {
-        void this.salvage(sel).then((ok) => {
-          if (ok) {
-            sh.remove();
-            this.smith(null);
-          }
-        });
+      if (act === 'open') {
+        const it = s.inventory.find((x) => x.id === t.dataset.id);
+        if (it) this.forgeDrawer(it, sh);
       }
     });
   },
 
+  forgeDrawer(it: Item, sh: HTMLElement, anim = false) {
+    const s = App.save;
+    const maxed = it.level >= MAX_ITEM_LEVEL;
+    const cost = upgradeCost(it);
+    const can = !maxed && s.gold >= cost.gold && s.shards >= cost.shards;
+    const preview = { ...it, level: Math.min(MAX_ITEM_LEVEL, it.level + 1) };
+    const d = itemDrawer(it, {
+      tabs: ['forge'], anim,
+      actions: maxed ? '' : `<button class="btn gold ${can ? '' : 'disabled'}" data-act="up">Forge +${it.level + 1} · ${cost.gold} ${icon('coin', 'sm')}${cost.shards ? ` ${cost.shards} ${icon('shard', 'sm')}` : ''}</button>`,
+      body: () => `${itemDetailsHTML(it)}${maxed ? '<div class="gold-text center">Fully forged</div>' : `<div class="section-title">After forging to +${it.level + 1}</div><ul>${itemMainMods(preview).map((m) => `<li class="good">${formatMod(m)}</li>`).join('')}</ul>${can ? '' : `<div class="bad center" style="font-size:13px">Need ${cost.gold} gold${cost.shards ? ' and ' + cost.shards + ' shards' : ''}.</div>`}`}`,
+      onAct: (act) => {
+        if (act !== 'up' || !can) return;
+        s.gold -= cost.gold;
+        s.shards -= cost.shards;
+        it.level++;
+        App.persist();
+        audio.play('chest');
+        d.remove();
+        sh.querySelector('[data-r=chips]')!.innerHTML = chips();
+        this.forgeDrawer(it, sh, true);
+      },
+    });
+  },
+
   // ───────────────────────── Guild ─────────────────────────
-  guild() {
+  guild(tab = 'talents') {
     const s = App.save;
     const r = renownLevel(s.renown);
-    const body = `
-      <div class="li panel"><div>${icon('star', 'lg')}</div><div class="grow"><div class="t">Renown Level ${r.level}</div>
-        <div class="hpbar" style="height:10px;margin-top:4px;border-color:#5a4a2a"><div class="fill" style="width:${(r.into / r.need) * 100}%;background:linear-gradient(180deg,#ffe08a,#c8902a)"></div></div>
-        <div class="d">${r.into} / ${r.need} renown · earn renown by clearing rooms and slaying bosses</div></div></div>
-      <div class="section-title">Talents · spend Rift Shards</div>
-      <div class="list">${TALENTS.map((t) => {
-        const lvl = s.talents[t.id] ?? 0;
-        const max = lvl >= t.max;
-        const cost = t.cost(lvl);
-        return `<div class="li panel">${icon(t.icon, 'md')}<div class="grow"><div class="t">${t.name} <span class="muted" style="font-size:12px">${lvl}/${t.max}</span></div>
-          <div class="d">${lvl ? 'Now: ' + t.desc(lvl) : 'Not learned'}${max ? '' : ` · Next: ${t.desc(lvl + 1)}`}</div></div>
-          ${max ? '<span class="gold-text head" style="font-size:12px">MAX</span>' : `<button class="btn small primary ${s.shards >= cost ? '' : 'disabled'}" data-act="buy" data-id="${t.id}">${cost} ${icon('shard', 'sm')}</button>`}</div>`;
-      }).join('')}</div>
-      <div class="section-title">Adventurer Classes</div>
-      <div class="list">${CLASSES.map((c) => `<div class="li panel ${c.implemented ? '' : 'locked'}" style="${s.selectedClass === c.id ? 'border-color:' + c.color : ''}">
-        <div style="width:42px;height:42px;border-radius:10px;background:${c.color}33;border:1px solid ${c.color};display:flex;align-items:center;justify-content:center;font-family:var(--head);font-weight:900;color:${c.color}">${c.name[0]}</div>
-        <div class="grow"><div class="t" style="color:${c.color}">${c.name}</div><div class="d">${c.implemented ? esc(c.desc) : esc(c.desc)}</div>
-        ${c.implemented ? `<div class="d" style="margin-top:3px"><b style="color:#fff">${c.special.name}:</b> ${esc(c.special.desc)}</div>` : ''}</div>
-        ${c.implemented ? (s.selectedClass === c.id ? '<span class="chip">Selected</span>' : '') : '<span class="chip muted">Coming soon</span>'}</div>`).join('')}</div>
-      <div class="section-title">Lifetime</div>
-      <div class="statgrid">
-        <div><span class="muted">Runs</span><span>${s.stats.runs}</span></div><div><span class="muted">Victories</span><span>${s.stats.victories}</span></div>
-        <div><span class="muted">Deaths</span><span>${s.stats.deaths}</span></div><div><span class="muted">Enemies slain</span><span>${s.stats.totalKills}</span></div>
-      </div>`;
-    const sh = sheet('Adventurer Guild', 'b_guild', body);
+    const body = tab === 'talents'
+      ? `<div class="li panel"><div>${icon('star', 'lg')}</div><div class="grow"><div class="t">Renown Level ${r.level}</div>
+          <div class="hpbar" style="height:10px;margin-top:4px;border-color:#5a4a2a"><div class="fill" style="width:${(r.into / r.need) * 100}%;background:linear-gradient(180deg,#ffe08a,#c8902a)"></div></div>
+          <div class="d">${r.into} / ${r.need} renown · earned by clearing rooms and slaying bosses</div></div></div>
+        <div class="section-title">Talents · permanent, bought with Rift Shards</div>
+        <div class="list">${TALENTS.map((t) => {
+          const lvl = s.talents[t.id] ?? 0;
+          const max = lvl >= t.max;
+          const cost = t.cost(lvl);
+          return `<div class="li panel">${icon(t.icon, 'md')}<div class="grow"><div class="t">${t.name} <span class="muted" style="font-size:12px">${lvl}/${t.max}</span></div>
+            <div class="d">${lvl ? 'Now: ' + t.desc(lvl) : 'Not learned'}${max ? '' : ` · Next: ${t.desc(lvl + 1)}`}</div></div>
+            ${max ? '<span class="gold-text head" style="font-size:12px">MAX</span>' : `<button class="btn small primary ${s.shards >= cost ? '' : 'disabled'}" data-act="buy" data-id="${t.id}">${cost} ${icon('shard', 'sm')}</button>`}</div>`;
+        }).join('')}</div>`
+      : `<div class="statgrid panel" style="padding:12px">
+          <div><span class="muted">Runs</span><span>${s.stats.runs}</span></div><div><span class="muted">Victories</span><span>${s.stats.victories}</span></div>
+          <div><span class="muted">Deaths</span><span>${s.stats.deaths}</span></div><div><span class="muted">Enemies slain</span><span>${s.stats.totalKills}</span></div>
+          <div><span class="muted">Furthest Act</span><span>${s.stats.bestAct || '—'}</span></div><div><span class="muted">Best victory</span><span>${s.stats.bestTimeVictory ? fmtTime(s.stats.bestTimeVictory) : '—'}</span></div>
+          <div><span class="muted">Highest tier</span><span>${s.maxTier}</span></div><div><span class="muted">Items owned</span><span>${s.inventory.length}</span></div>
+          <div><span class="muted">Reactions found</span><span>${s.codex.reactions.length}/${REACTIONS.length}</span></div><div><span class="muted">Lore pages</span><span>${s.codex.lore.length}/${LORE.length}</span></div>
+        </div>
+        <div class="section-title">Bosses defeated</div>
+        <div class="list">${BOSSES.map((b) => `<div class="li panel"><div class="grow"><div class="t">${s.codex.bosses[b.id] ? b.name : '???'}</div><div class="d">${BIOMES[b.biome].name}</div></div><b>${s.codex.bosses[b.id] ?? 0}×</b></div>`).join('')}</div>`;
+    const sh = sheet('Adventurer Guild', 'b_guild', body, '', tabBtns([['talents', 'Talents'], ['records', 'Records']], tab));
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
+      if (act.startsWith('tab-')) {
+        audio.play('ui');
+        sh.remove();
+        return this.guild(act.slice(4));
+      }
       if (act === 'buy') {
         const td = TALENTS.find((x) => x.id === t.dataset.id)!;
         const lvl = s.talents[td.id] ?? 0;
@@ -446,7 +595,7 @@ export const HubUI = {
     const luck = Math.min(3, lvl * 0.25 + (s.maxTier - 1) * 0.4);
     const tier = Math.min(2, Math.floor(lvl / 3));
     return Array.from({ length: 6 }, () => {
-      const it = generateItem({ rarity: rollRarity(luck, 0, lvl >= 6 ? 4 : 3), tier, cls: s.selectedClass });
+      const it = generateItem({ rarity: rollRarity(luck, 0, lvl >= 6 ? 4 : 3), tier, cls: s.selectedClass, owned: new Set(s.inventory.map((i) => i.base)) });
       it.isNew = false;
       return it;
     });
@@ -457,32 +606,35 @@ export const HubUI = {
     const refreshCost = 40 * (s.merchant.refreshes + 1);
     const price = (it: Item) => RARITY[it.rarity].price;
     const body = `<div class="flavor">"Rift-salvage, fresh this morning! Prices fair. Mostly." — Odalie the Trader</div>
-      <div class="list">${s.merchant.stock.map((it, i) => `<div class="li panel">${itemTile(it, '', 'view')}
-        <div class="grow"><div class="t" style="color:${RARITY[it.rarity].color}">${esc(it.name)}</div><div class="d">${RARITY[it.rarity].name} ${SLOT_NAMES[it.slot]}${it.powers.length ? ' · <span class="gold-text">Unique power</span>' : ''}</div></div>
-        <button class="btn small gold ${s.gold >= price(it) ? '' : 'disabled'}" data-act="buy" data-i="${i}">${price(it)}</button></div>`).join('') || '<div class="muted">Sold out! New stock arrives after your next run.</div>'}</div>
-      <div class="muted" style="font-size:13px;margin-top:10px">Stock refreshes after every run. Better wares appear as your Renown grows.</div>`;
+      <div class="list">${s.merchant.stock.map((it, i) => `<div class="li panel shop-row" data-act="view" data-i="${i}">${itemTile(it)}
+        <div class="grow"><div class="t" style="color:${RARITY[it.rarity].color}">${esc(it.name)}</div><div class="d">${RARITY[it.rarity].name} ${SLOT_NAMES[it.slot]}${it.slot === 'weapon' ? ' · ' + getClass(weaponClass(it)!).name : ''}</div></div>
+        <span class="price ${s.gold >= price(it) ? '' : 'bad'}">${price(it)} ${icon('coin', 'sm')}</span></div>`).join('') || '<div class="empty">Sold out! New stock arrives after your next run.</div>'}</div>
+      <div class="muted" style="font-size:13px;margin-top:10px">Stock refreshes after every run and improves with Renown. Tap a ware to inspect and buy.</div>`;
     const sh = sheet('Merchant', 'b_merchant', body, `<button class="btn block ${s.gold >= refreshCost ? '' : 'disabled'}" data-act="refresh">Refresh stock · ${refreshCost} ${icon('coin', 'sm')}</button>`);
-    onAct(sh, async (act, t) => {
+    onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
       if (act === 'view') {
-        const it = s.merchant.stock.find((x) => x.id === t.dataset.id);
-        if (it) this.inspect(it);
-        return;
-      }
-      if (act === 'buy') {
-        const it = s.merchant.stock[Number(t.dataset.i)];
-        if (!it || s.gold < price(it)) return;
-        const ok = await confirmDialog('Purchase?', `Buy <b style="color:${RARITY[it.rarity].color}">${esc(it.name)}</b> for ${price(it)} gold?<br><br><span style="font-size:14px">${itemDetailsHTML(it, false)}</span>`, 'Buy', false);
-        if (!ok) return;
-        s.gold -= price(it);
-        s.merchant.stock.splice(Number(t.dataset.i), 1);
-        it.isNew = true;
-        s.inventory.push(it);
-        discoverItem(it);
-        App.persist();
-        audio.play('chest');
-        sh.remove();
-        this.merchant();
+        const idx = Number(t.dataset.i);
+        const it = s.merchant.stock[idx];
+        if (!it) return;
+        const dr = itemDrawer(it, {
+          tabs: ['details'],
+          actions: `<button class="btn gold ${s.gold >= price(it) ? '' : 'disabled'}" data-act="buy">Buy · ${price(it)} ${icon('coin', 'sm')}</button>`,
+          body: () => itemDetailsHTML(it) + compareHTML(it) + (s.inventory.some((x) => stackKey(x) === stackKey(it)) ? `<div class="gold-text center" style="margin-top:6px">You own this item — buying adds a copy for ranking up</div>` : ''),
+          onAct: (a) => {
+            if (a !== 'buy' || s.gold < price(it)) return;
+            s.gold -= price(it);
+            s.merchant.stock.splice(idx, 1);
+            it.isNew = true;
+            s.inventory.push(it);
+            discoverItem(it);
+            App.persist();
+            audio.play('chest');
+            dr.remove();
+            sh.remove();
+            this.merchant();
+          },
+        });
       }
       if (act === 'refresh') {
         if (s.gold < refreshCost) return;
@@ -573,8 +725,15 @@ export const HubUI = {
       <div class="section-title">Controls</div>
       <div class="muted" style="line-height:1.5;font-size:14px"><b>Touch:</b> drag anywhere on the lower screen to move; tap DODGE and SPECIAL.<br><b>Keyboard:</b> WASD/Arrows move · Space/Shift dodge · E/Q special · Esc/P pause.<br>Attacks are automatic when an enemy is in reach.</div>
       <div class="section-title">Save Data</div>
-      <div class="muted" style="font-size:14px;margin-bottom:8px">Progress is saved automatically in this browser (localStorage).</div>
-      <button class="btn danger block" data-act="reset">Reset all progress</button>`;
+      <div class="panel" style="padding:10px;font-size:14px;line-height:1.45">
+        <div>Status: <b>${Cloud.status === 'online' ? 'Saved to your Claude account (cloud) and this device' : Cloud.status === 'connecting' ? 'Connecting to cloud…' : 'Saved on this device only'}</b></div>
+        <div class="muted">Last saved ${st && App.save.savedAt ? new Date(App.save.savedAt).toLocaleTimeString() : '—'}. Progress saves automatically after every purchase, upgrade and room.</div>
+      </div>
+      <div class="col" style="margin-top:8px">
+        <button class="btn block" data-act="export">Show backup code</button>
+        <button class="btn block" data-act="import">Restore from backup code</button>
+        <button class="btn danger block" data-act="reset">Reset all progress</button>
+      </div>`;
     const sh = sheet('Settings', 'gear', body);
     sh.querySelectorAll<HTMLInputElement>('input[data-set]').forEach((inp) =>
       inp.addEventListener('input', () => {
@@ -591,6 +750,46 @@ export const HubUI = {
         t.classList.toggle('on', st[k]);
         App.persist();
         audio.play('ui');
+      }
+      if (act === 'export') {
+        const code = exportSave(App.save);
+        const box = el(`<div class="screen clear-bg" style="z-index:80"><div class="spacer"></div><div class="panel" style="padding:16px;max-width:380px;width:100%">
+          <h2 style="font-size:18px">Backup code</h2><p class="muted" style="font-size:13px">Copy this text somewhere safe. Paste it into "Restore" on any device to recover your progress.</p>
+          <textarea id="save-export" class="codebox" readonly>${code}</textarea>
+          <div class="row" style="margin-top:8px"><button class="btn grow" data-act="copy">Copy</button><button class="btn primary grow" data-act="done">Done</button></div></div><div class="spacer"></div></div>`);
+        uiRoot().appendChild(box);
+        onAct(box, (a) => {
+          if (a === 'copy') {
+            const ta = box.querySelector<HTMLTextAreaElement>('textarea')!;
+            navigator.clipboard?.writeText(code).then(() => (box.querySelector('[data-act=copy]')!.textContent = 'Copied!'), () => { ta.select(); });
+            ta.select();
+          } else box.remove();
+        });
+      }
+      if (act === 'import') {
+        const box = el(`<div class="screen clear-bg" style="z-index:80"><div class="spacer"></div><div class="panel" style="padding:16px;max-width:380px;width:100%">
+          <h2 style="font-size:18px">Restore progress</h2><p class="muted" style="font-size:13px">Paste a backup code. This replaces your current progress.</p>
+          <textarea id="save-import" class="codebox" placeholder="RB1:…"></textarea><div class="bad" data-r="err" style="font-size:13px"></div>
+          <div class="row" style="margin-top:8px"><button class="btn grow" data-act="cancel">Cancel</button><button class="btn danger grow" data-act="load">Restore</button></div></div><div class="spacer"></div></div>`);
+        uiRoot().appendChild(box);
+        onAct(box, async (a) => {
+          if (a === 'cancel') return box.remove();
+          const data = importSave(box.querySelector<HTMLTextAreaElement>('textarea')!.value);
+          if (!data) {
+            box.querySelector('[data-r=err]')!.textContent = 'That is not a valid Riftbound backup code.';
+            return;
+          }
+          const ok = await confirmDialog('Replace progress?', `Restore a save with ${Math.floor(data.gold)} gold, ${data.inventory.length} items and ${data.stats.runs} runs? Your current progress will be overwritten.`, 'Restore');
+          if (!ok) return;
+          App.save = data;
+          App.applySettings();
+          App.persist();
+          box.remove();
+          sh.remove();
+          this.ensureMerchantStock();
+          this.refresh();
+          if (App.save.activeRun) this.resumePrompt();
+        });
       }
       if (act === 'reset') {
         const ok = await confirmDialog('Reset everything?', 'All items, currency, talents and codex entries will be permanently erased.', 'Erase');
@@ -610,6 +809,7 @@ const spriteCache = new Map<string, string>();
 function spriteUrl(key: string): string {
   let u = spriteCache.get(key);
   if (u) return u;
+  if (!App.game?.textures.exists(key)) return '';
   const tex = App.game.textures.get(key);
   const src = tex.getSourceImage() as HTMLCanvasElement;
   u = src.toDataURL ? src.toDataURL() : '';

@@ -9,7 +9,7 @@ import { getBoss } from '../data/bosses';
 import { closeScreen, esc, fmtTime, onAct, openScreen } from './dom';
 import { itemTile } from './itemview';
 import { Input } from './input';
-import { renownLevel } from '../core/save';
+import { renownLevel, selectClass } from '../core/save';
 import type { Hud, Tips } from './hud';
 import type { HubUI as HubUIType } from './hub';
 
@@ -20,6 +20,7 @@ export function makeFlow(hud: Hud, tips: Tips, hub: typeof HubUIType) {
       const save = App.save;
       if (!save.codex.lore.includes('l_fracture')) save.codex.lore.push('l_fracture');
       App.run = new RunState(save);
+      save.activeRun = App.run.snapshot(false);
       App.persist();
       ending = false;
       hub.hide();
@@ -28,11 +29,48 @@ export function makeFlow(hud: Hud, tips: Tips, hub: typeof HubUIType) {
       g.scene.start('Run');
     },
 
+    /** Resume the unfinished run stored in the save. */
+    continueRun(): boolean {
+      const save = App.save;
+      const sn = save.activeRun;
+      if (!sn) return false;
+      try {
+        if (sn.cls !== save.selectedClass) selectClass(save, sn.cls);
+        App.run = RunState.restore(save, sn);
+      } catch (e) {
+        console.warn('Could not restore run', e);
+        save.activeRun = null;
+        App.persist();
+        return false;
+      }
+      ending = false;
+      hub.hide();
+      App.game.scene.stop('Hub');
+      App.game.scene.start('Run');
+      return true;
+    },
+
+    /** End an unfinished run from the village (as if fallen): keeps its gold, shards and loot. */
+    forfeitRun(): { gold: number; shards: number } | null {
+      const save = App.save;
+      const sn = save.activeRun;
+      if (!sn) return null;
+      save.activeRun = null;
+      save.gold += Math.round(sn.gold);
+      save.shards += sn.shards;
+      save.stats.runs++;
+      save.stats.deaths++;
+      save.stats.totalKills += sn.kills;
+      App.persist();
+      return { gold: Math.round(sn.gold), shards: sn.shards };
+    },
+
     endRun(victory: boolean) {
       if (ending || !App.run) return;
       ending = true;
       const run = App.run;
       const save = App.save;
+      save.activeRun = null;
       const sum = run.summary(victory);
       const tierMult = 1 + (run.tier - 1) * 0.25;
       sum.shards += victory ? 5 : 0;
@@ -64,7 +102,7 @@ export function makeFlow(hud: Hud, tips: Tips, hub: typeof HubUIType) {
       hud.hide();
       tips.hide();
       Input.enabled = false;
-      audio.stopMusic();
+      audio.silence();
       audio.play(victory ? 'victory' : 'defeat');
       showResults(sum, victory, unlockedTier, newLvl > prevLvl ? newLvl : 0).then(() => {
         App.run = null;

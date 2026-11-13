@@ -46,6 +46,7 @@ export interface GearDef {
   props?: WeaponProps;
   powers?: string[];
   grant?: Element; // accessory/armor that adds an element to your strikes
+  chest?: boolean; // only found in Merchant chests (craftable once discovered)
   exclusive?: string; // boss id: only drops from that boss (or Boss Rush / crafting once discovered)
   desc: string;
 }
@@ -208,6 +209,37 @@ GEAR.push(
   X('x_mirrorshard', 'Mirror Shard', 'ring', 3, 'ring', ['#e0d8ff', '#ffffff', '#a25cff'], { dcd: -0.08 }, 'Perfect dodges leave an exploding mirror decoy.', ['pdDecoy'], 'king'),
   X('x_carapace', 'Astral Carapace', 'armor', 4, 'robe', ['#18203a', '#9fd8ff', '#ffcf5a'], { hp: 50, arm: 10 }, 'Every 6s, a gravity pulse drags nearby enemies in and damages them.', ['gravPulse'], 'arbiter'),
   X('x_orrery', 'Orrery Pendant', 'amulet', 3, 'amulet', ['#ffcf5a', '#9fd8ff', '#ffffff'], { ep: 0.1 }, 'Three stars orbit you, damaging enemies they touch.', ['orbitStars'], 'arbiter'),
+);
+
+// ───────── Vault collection: found only in Merchant chests ─────────
+const C = (g: GearDef): GearDef => ({ ...g, chest: true });
+const CW = (id: string, name: string, cls: ClassId, rarity: Rarity, icon: string, colors: [string, string, string], st: Record<string, number>, props: WeaponProps, desc: string) =>
+  C({ id, name, slot: 'weapon', rarity, cls, icon, colors, main: S(st), props, desc });
+const CA = (id: string, name: string, slot: Slot, rarity: Rarity, icon: string, colors: [string, string, string], st: Record<string, number>, desc: string, powers: string[] = []) =>
+  C(A(id, name, slot, rarity, icon, colors, st, desc, powers));
+GEAR.push(
+  CW('c_gildsabre', 'Gilded Sabre', 'swordsman', 1, 'sabre', ['#ffe08a', '#8a5a14', '#ffffff'], { dmg: 5, as: 0.1, gf: 0.15 }, { extraStrike: 0.15 }, 'A lucky vault blade: quick, gold-hungry, and fond of striking twice.'),
+  CW('c_vaultbreaker', 'Vaultbreaker', 'swordsman', 3, 'greatsword', ['#c8a060', '#3a2a1a', '#ffcf5a'], { dmg: 12, as: -0.1 }, { element: 'earth', aoeOnHit: 50, knock: 1.4 }, 'Built to crack vault doors. Every blow quakes the ground.'),
+  CW('c_coinedge', 'Coin-Edge Knives', 'assassin', 2, 'knives', ['#ffcf5a', '#5a3a14', '#fff0a0'], { dmg: 5, crit: 0.06 }, { knife: 1, execute: 0.3 }, 'Thrown coins sharpened to a razor. Every third attack flies.'),
+  CW('c_nightjar', 'Nightjar Fangs', 'assassin', 4, 'daggers', ['#1a1030', '#c87cff', '#ff5ac8'], { dmg: 9, crit: 0.12, cdmg: 0.4 }, { element: 'shadow', poison: 0.5, extraStrike: 0.3 }, 'Silent shadow fangs that strike twice and leave venom behind.'),
+  CW('c_tidestaff', 'Tidecaller Staff', 'mage', 1, 'staff', ['#3a6a8a', '#3fa9ff', '#c8ecff'], { dmg: 4 }, { element: 'water', multishot: 1 }, 'Two soaking bolts at once — perfect for Lightning and Ice reactions.'),
+  CW('c_starchart', 'Starchart Codex', 'mage', 3, 'tome', ['#1e1a40', '#ffcf5a', '#fff3c4'], { dmg: 7, ad: 0.2 }, { element: 'light', homing: 3, pierce: 2, splash: 30 }, 'Its pages map every star. Bolts find their mark and pass straight through.'),
+  CW('c_gildbow', 'Gilded Longbow', 'archer', 2, 'longbow', ['#ffcf5a', '#8a5a14', '#ffffff'], { dmg: 7, crit: 0.08 }, { pierce: 3 }, 'A vault marksman’s bow. Arrows punch through three foes.'),
+  CW('c_comet', 'Comet Bow', 'archer', 4, 'recurve', ['#ff7a2f', '#3a2a6a', '#fff3c4'], { dmg: 11 }, { element: 'fire', multishot: 2, splash: 30, starfall: 1 }, 'Every arrow is a falling comet. Every fifth calls the sky down.'),
+  CW('c_vaultmaul', 'Vault-Door Maul', 'guardian', 1, 'hammer', ['#8a90a8', '#ffcf5a', '#4a4e60'], { dmg: 7, arm: 10 }, { stun: 0.2, knock: 1.3 }, 'Literally a vault door on a stick. Stuns, shoves, protects.'),
+  CW('c_dawnhammer', 'Dawnhammer', 'guardian', 3, 'hammer', ['#fff3c4', '#ffcf5a', '#ffffff'], { dmg: 13, hp: 30 }, { element: 'light', aoeOnHit: 50, quake: 1 }, 'Radiant shockwaves, and every fourth swing shakes the whole arena.'),
+  CW('c_wispjar', 'Jar of Wisps', 'summoner', 2, 'lantern', ['#9feaff', '#2a4a6a', '#ffffff'], { dmg: 5 }, { summons: 2, compDmg: -0.2, compRate: 0.3 }, 'Uncork it and a swarm of quick wisps pours out.'),
+  CW('c_gildcrook', 'Gilded Crook', 'summoner', 3, 'staff', ['#ffcf5a', '#5a3a8a', '#c8fff0'], { dmg: 8 }, { summons: 1, compDmg: 0.35, raise: 0.2 }, 'A shepherd’s crook for souls: stronger spirits, and the fallen may rise.'),
+  CA('c_vaultmail', 'Vaultguard Mail', 'armor', 0, 'armor', ['#8a90a8', '#ffcf5a', '#4a4e60'], { hp: 22, arm: 5 }, 'Standard issue for vault guards.'),
+  CA('c_silkhood', 'Silkweave Hood', 'helmet', 0, 'hood', ['#6a3a8a', '#2a1a40', '#c8a0ff'], { hp: 10, ms: 0.03 }, 'Light and quiet.'),
+  CA('c_runners', 'Gilded Runners', 'boots', 1, 'boots', ['#ffcf5a', '#8a5a14', '#ffffff'], { ms: 0.07, gf: 0.1 }, 'Fast feet, full pockets.'),
+  CA('c_mirrorplate', 'Mirrorplate', 'armor', 2, 'armor', ['#e0d8ff', '#ffffff', '#a25cff'], { hp: 30, arm: 10 }, 'Polished to confuse: 10% chance to evade attacks.', ['evasion']),
+  CA('c_lionhelm', 'Lionheart Helm', 'helmet', 2, 'helm', ['#ffcf5a', '#8a5a14', '#ff7a2f'], { hp: 24, arm: 6, dmgP: 0.06 }, 'Courage you can wear.'),
+  CA('c_comettreads', 'Comet Treads', 'boots', 2, 'boots', ['#ff7a2f', '#3a2a6a', '#fff3c4'], { ms: 0.06, dcd: -0.12 }, 'Dodging leaves an exploding decoy.', ['phantom']),
+  CA('c_dragonscale', 'Dragonscale Cuirass', 'armor', 3, 'armor', ['#8a2a1a', '#ffcf5a', '#ff7a2f'], { hp: 50, arm: 12, ep: 0.15 }, 'Taking damage releases a flame pulse.', ['emberheart']),
+  CA('c_stargazer', 'Stargazer Cowl', 'helmet', 3, 'hood', ['#1e1a40', '#9fd8ff', '#ffcf5a'], { crit: 0.08, ad: 0.2 }, 'Critical hits shorten your special cooldown.', ['insight']),
+  CA('c_voidgreaves', 'Voidstep Greaves', 'boots', 3, 'boots', ['#2a1440', '#a25cff', '#ff5ac8'], { ms: 0.08 }, 'After dodging: +40% speed and your next hit deals +60%.', ['windwalker', 'dodgeCharge']),
+  CA('c_raiment', 'Raiment of Ages', 'armor', 4, 'robe', ['#ffcf5a', '#a25cff', '#ffffff'], { hp: 60, arm: 14, ad: 0.2, rd: 0.2 }, 'After a hit, take 25% less damage for 3s. Reactions deal +50% damage.', ['unbreakable', 'resonant']),
 );
 
 export const EXCLUSIVES_OF = (boss: string) => GEAR.filter((g) => g.exclusive === boss).map((g) => g.id);

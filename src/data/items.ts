@@ -24,6 +24,7 @@ export interface BaseDef {
   grant?: import('../core/types').Element;
   desc?: string;
   exclusive?: string;
+  chest?: boolean;
 }
 
 export const BASES: BaseDef[] = [
@@ -138,7 +139,7 @@ export function rollRarity(luck: number, minRarity: Rarity = 0, maxRarity: Rarit
 
 const SLOT_WEIGHT: Record<Slot, number> = { weapon: 30, armor: 18, helmet: 12, boots: 12, ring: 14, amulet: 14 };
 
-export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot; cls?: string; base?: string; owned?: Set<string> }): Item {
+export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot; cls?: string; base?: string; owned?: Set<string>; chest?: boolean }): Item {
   const tier = opts.tier ?? 0;
   let base: BaseDef;
   if (opts.base) base = getBase(opts.base);
@@ -147,8 +148,11 @@ export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot;
     // weapons: 75% for the current class, otherwise any class (so all weapons stay obtainable)
     const wantCls = slot === 'weapon' && opts.cls && chance(0.75) ? opts.cls : null;
     const fits = (b: BaseDef) => b.slot === slot && (!wantCls || b.cls === wantCls) && (b.rarity === undefined ? b.tier <= tier : b.rarity === opts.rarity);
-    let pool = BASES.filter((b) => fits(b) && !b.exclusive);
-    if (!pool.length) pool = BASES.filter((b) => b.slot === slot && !b.exclusive && (!wantCls || b.cls === wantCls));
+    // chest rolls favor the Vault collection (60%); normal drops never contain it
+    const vault = opts.chest && chance(0.6);
+    let pool = BASES.filter((b) => fits(b) && !b.exclusive && (vault ? b.chest : opts.chest ? true : !b.chest));
+    if (!pool.length) pool = BASES.filter((b) => fits(b) && !b.exclusive && (opts.chest || !b.chest));
+    if (!pool.length) pool = BASES.filter((b) => b.slot === slot && !b.exclusive && !b.chest && (!wantCls || b.cls === wantCls));
     // items you already own are 3x as likely, so duplicates for star ranks keep coming
     base = weighted(pool.length ? pool : BASES, (b) => (opts.owned?.has(b.id) ? 3 : 1));
   }

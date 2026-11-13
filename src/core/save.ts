@@ -43,6 +43,7 @@ export interface SaveData {
   mastery: Record<string, number>;
   spec: Record<string, string>;
   modes: { bestWave: number; bossRushWins: number; ascendedWins: number; trials: string[]; dailyDone: string };
+  chests: { pity: number; opened: number };
   objectives: { day: number; week: number; daily: Record<string, number>; weekly: Record<string, number>; claimed: string[] };
   merchant: { stock: Item[]; refreshes: number; seedRun: number };
 }
@@ -74,6 +75,7 @@ function defaults(): SaveData {
     mastery: {},
     spec: {},
     modes: { bestWave: 0, bossRushWins: 0, ascendedWins: 0, trials: [], dailyDone: '' },
+    chests: { pity: 0, opened: 0 },
     objectives: { day: 0, week: 0, daily: {}, weekly: {}, claimed: [] },
     merchant: { stock: [], refreshes: 0, seedRun: -1 },
   };

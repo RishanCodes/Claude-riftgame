@@ -857,3 +857,21 @@ obstacle('ob_ruin_s', 18, 18, '#5a5470', '#8a82a8', '#2a2440', undefined, true);
 obstacle('ob_ruin_l', 30, 26, '#5a5470', '#8a82a8', '#2a2440', undefined, true);
 obstacle('ob_star_s', 18, 14, '#2a3a6a', '#5a7ac8', '#101830', '#9fd8ff');
 obstacle('ob_star_l', 30, 22, '#2a3a6a', '#5a7ac8', '#101830', '#ffcf5a');
+
+// Merchant chests (wood / rift / astral)
+for (const [key, body, light, trim, glow] of [['chestw', '#7a4a26', '#a86a3a', '#c8a070', '#ffe9a0'], ['chestr', '#3a2a5a', '#5a4a8a', '#a25cff', '#e0b0ff'], ['chesta', '#1e2a50', '#3a5ab8', '#ffcf5a', '#fff3c4']] as [string, string, string, string, string][]) {
+  for (let f = 0; f < 2; f++) {
+    def(`${key}_${f}`, () => {
+      const pc = new PixelCanvas(20, 16);
+      pc.rect(1, 7, 18, 9, body); pc.rect(1, 7, 18, 1, light);
+      pc.rect(1, 11, 18, 1, trim); pc.rect(1, 7, 1, 9, trim); pc.rect(18, 7, 1, 9, trim);
+      if (f === 0) {
+        pc.rect(1, 2, 18, 5, body); pc.rect(1, 2, 18, 1, light); pc.rect(1, 2, 1, 5, trim); pc.rect(18, 2, 1, 5, trim);
+        pc.rect(8, 5, 4, 4, trim); pc.px(9, 6, '#120c1a'); pc.px(10, 6, '#120c1a');
+      } else {
+        pc.rect(1, 0, 18, 3, body); pc.rect(2, 3, 16, 4, glow); pc.rect(4, 4, 12, 2, '#ffffff');
+      }
+      return pc.outline();
+    });
+  }
+}

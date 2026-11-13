@@ -16,6 +16,7 @@ import { confirmDialog, el, esc, fmtTime, onAct, uiRoot } from './dom';
 import { compareHTML, discoverItem, itemDetailsHTML, itemTile, SLOT_NAMES, starStr } from './itemview';
 import { stacks, canRankUp, rankUp, protectedIds, weaponClass, type Stack } from '../game/inventory';
 import { Cloud } from '../core/cloud';
+import { CHESTS, chestCost, openChest, PITY, MULTI, type ChestDef } from '../data/chests';
 import { MODES, TRIALS, dailyFor, getModifier, masteryLevel, ROMAN, SPEC_LEVEL, specsFor, MASTERY_XP, type ModeId } from '../data/modes';
 import { objectives, claim, unclaimedCount } from '../game/objectives';
 import { BASES as ALL_BASES } from '../data/items';
@@ -737,8 +738,9 @@ export const HubUI = {
     });
   },
 
-  merchant() {
+  merchant(tab = 'wares') {
     const s = App.save;
+    if (tab === 'chests') return this.chests();
     const refreshCost = 40 * (s.merchant.refreshes + 1);
     const price = (it: Item) => RARITY[it.rarity].price;
     const body = `<div class="flavor">"Rift-salvage, fresh this morning! Prices fair. Mostly." — Odalie the Trader</div>
@@ -746,9 +748,13 @@ export const HubUI = {
         <div class="grow"><div class="t" style="color:${RARITY[it.rarity].color}">${esc(it.name)}</div><div class="d">${RARITY[it.rarity].name} ${SLOT_NAMES[it.slot]}${it.slot === 'weapon' ? ' · ' + getClass(weaponClass(it)!).name : ''}</div></div>
         <span class="price ${s.gold >= price(it) ? '' : 'bad'}">${price(it)} ${icon('coin', 'sm')}</span></div>`).join('') || '<div class="empty">Sold out! New stock arrives after your next run.</div>'}</div>
       <div class="muted" style="font-size:13px;margin-top:10px">Stock refreshes after every run and improves with Renown. Tap a ware to inspect and buy.</div>`;
-    const sh = sheet('Merchant', 'b_merchant', body, `<button class="btn block ${s.gold >= refreshCost ? '' : 'disabled'}" data-act="refresh">Refresh stock · ${refreshCost} ${icon('coin', 'sm')}</button>`);
+    const sh = sheet('Merchant', 'b_merchant', body, `<button class="btn block ${s.gold >= refreshCost ? '' : 'disabled'}" data-act="refresh">Refresh stock · ${refreshCost} ${icon('coin', 'sm')}</button>`, tabBtns([['wares', 'Wares'], ['chests', 'Chests']], 'wares'));
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
+      if (act === 'tab-chests') {
+        sh.remove();
+        return this.chests();
+      }
       if (act === 'view') {
         const idx = Number(t.dataset.i);
         const it = s.merchant.stock[idx];
@@ -782,6 +788,103 @@ export const HubUI = {
         sh.remove();
         this.merchant();
       }
+    });
+  },
+
+  // ───────────────────────── Chests ─────────────────────────
+  chests() {
+    const s = App.save;
+    const names = RARITY.map((r) => r.name);
+    const left = PITY - (s.chests.pity % PITY);
+    const price = (c: ChestDef, n: number) => {
+      const k = chestCost(c, n);
+      return `${k.gold ? `${k.gold} ${icon('coin', 'sm')}` : ''}${k.shards ? `${k.shards} ${icon('shard', 'sm')}` : ''}`;
+    };
+    const can = (c: ChestDef, n: number) => {
+      const k = chestCost(c, n);
+      return s.gold >= k.gold && s.shards >= k.shards;
+    };
+    const body = `<div class="flavor">"Sealed crates straight from the rift. What’s inside? That’s the fun part." — Odalie</div>
+      <div class="panel pity"><b>Vault collection:</b> 22 weapons and armor pieces found <b>only</b> in chests (later craftable at the Blacksmith once discovered).
+        <div style="margin-top:6px">Rift & Astral chests: guaranteed <b style="color:${RARITY[3].color}">Legendary or better</b> within <b>${left}</b> more chest${left === 1 ? '' : 's'}.</div></div>
+      <div class="list" style="margin-top:10px">${CHESTS.map((c) => `<div class="panel chest-card" style="--cc:${c.color}">
+        <div class="row"><img class="chest-img" src="${spriteUrl(c.sprite + '_0')}" alt=""><div class="grow"><div class="t" style="color:${c.color}">${c.name}</div><div class="d">${c.desc}</div></div></div>
+        <div class="odds">${c.odds.map((o, i) => (o ? `<span style="color:${RARITY[i].color}">${names[i]} <b>${o}%</b></span>` : '')).join('')}</div>
+        <div class="row" style="margin-top:8px"><button class="btn grow ${can(c, 1) ? 'gold' : 'disabled'}" data-act="open-${c.id}-1">Open · ${price(c, 1)}</button><button class="btn grow ${can(c, MULTI) ? 'primary' : 'disabled'}" data-act="open-${c.id}-${MULTI}">×${MULTI} · ${price(c, MULTI)}</button></div>
+      </div>`).join('')}</div>
+      <div class="muted center" style="font-size:12px;margin-top:10px">Opened so far: ${s.chests.opened}. ×${MULTI} costs 10% less. Weapons lean toward your current hero.</div>`;
+    const sh = sheet('Merchant', 'b_merchant', body, '', tabBtns([['wares', 'Wares'], ['chests', 'Chests']], 'chests'));
+    onAct(sh, async (act) => {
+      if (act === 'close') return closeSheet(sh);
+      if (act === 'tab-wares') {
+        sh.remove();
+        return this.merchant();
+      }
+      if (act.startsWith('open-')) {
+        const [, id, n] = act.split('-');
+        const c = CHESTS.find((x) => x.id === id)!;
+        const count = Number(n);
+        if (!can(c, count)) return;
+        const k = chestCost(c, count);
+        s.gold -= k.gold;
+        s.shards -= k.shards;
+        const res = openChest(c, count, s.chests.pity, s.selectedClass, new Set(s.inventory.map((i) => i.base)));
+        s.chests.pity = res.pity;
+        s.chests.opened += count;
+        for (const it of res.items) {
+          s.inventory.push(it);
+          discoverItem(it);
+        }
+        App.persist();
+        await this.chestReveal(c, res.items);
+        sh.remove();
+        this.chests();
+      }
+    });
+  },
+
+  /** Chest opening: shake, burst in the best rarity's color, then reveal the loot. */
+  chestReveal(c: ChestDef, items: Item[]): Promise<void> {
+    return new Promise((resolve) => {
+      const best = Math.max(...items.map((i) => i.rarity));
+      const r = RARITY[best];
+      const scr = el(`<div class="screen chest-open" style="z-index:70;--glow:${r.glow};--rc:${r.color}"><div class="spacer"></div>
+        <div class="chest-stage"><div class="beams" style="--glow:${r.glow}"></div><img class="chest-big shake" src="${spriteUrl(c.sprite + '_0')}" alt=""></div>
+        <div class="screen-sub" data-r="hint">Tap the chest to open it</div>
+        <div class="chest-loot"></div><div class="spacer"></div>
+        <button class="btn primary" data-act="done" style="min-width:200px;visibility:hidden">Collect</button></div>`);
+      uiRoot().appendChild(scr);
+      audio.play('chest');
+      const img = scr.querySelector<HTMLImageElement>('.chest-big')!;
+      let opened = false;
+      const open = () => {
+        if (opened) return;
+        opened = true;
+        img.classList.remove('shake');
+        img.src = spriteUrl(c.sprite + '_1');
+        img.classList.add('pop');
+        scr.classList.add('lit');
+        audio.play(best >= 3 ? 'legendary' : 'blessing');
+        scr.querySelector('[data-r=hint]')!.innerHTML = `<span style="color:${r.color}">${items.length > 1 ? `Best pull: ${r.name}` : r.name}</span>`;
+        const loot = scr.querySelector<HTMLElement>('.chest-loot')!;
+        loot.innerHTML = items.length === 1
+          ? `<div class="panel item-card reveal" style="border-color:${r.color}">${itemDetailsHTML(items[0])}${compareHTML(items[0])}</div>`
+          : `<div class="chest-grid">${items.map((it, i) => `<div class="cg reveal" style="animation-delay:${0.1 + i * 0.12}s">${itemTile(it, '', 'peek')}<div class="cgn" style="color:${RARITY[it.rarity].color}">${esc(it.name)}</div><div class="cgr" style="color:${RARITY[it.rarity].color}">${RARITY[it.rarity].name}</div></div>`).join('')}</div>`;
+        scr.querySelector<HTMLElement>('[data-act=done]')!.style.visibility = 'visible';
+      };
+      img.addEventListener('click', open);
+      setTimeout(open, 1600);
+      onAct(scr, (act, t) => {
+        if (act === 'done') {
+          audio.play('ui');
+          scr.remove();
+          resolve();
+        }
+        if (act === 'peek') {
+          const it = items.find((x) => x.id === t.dataset.id);
+          if (it) this.inspect(it);
+        }
+      });
     });
   },
 

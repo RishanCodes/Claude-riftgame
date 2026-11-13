@@ -79,6 +79,15 @@ Design decisions:
 - **Procedural art with a shared outline pass**, so everything (characters, enemies, bosses,
   props, UI icons) has one cohesive pixel-art style without external assets.
 
+## Merchant Chests & the Vault collection
+
+- **Chests** (Merchant → Chests tab): Wooden (200 gold: 60% Common / 32% Rare / 7% Epic / 1% Legendary),
+  Rift (650 gold: 55% Rare / 33% Epic / 10% Legendary / 2% Mythic) and Astral (25 shards: 62% Epic / 30% Legendary /
+  8% Mythic). Odds are shown in game; ×5 opens cost 10% less. Rift and Astral chests guarantee a Legendary or
+  better within 15 opens (pity counter saved). Weapons lean ~80% toward your current hero.
+- **Vault collection**: 22 chest-only items — 12 weapons (2 per hero) and 10 armor pieces across all five
+  rarities. They never drop in runs; once discovered they can be crafted at the Blacksmith.
+
 ## RIFTBOUND — The Ascension Update
 
 **Combat**

@@ -464,3 +464,26 @@ h1, h2, h3, .head { font-family: var(--head); letter-spacing: 0.04em; margin: 0;
 .combo-pips.ready b { opacity: 1; }
 .combo-pips.counter i { border-color: #9fe8ff; box-shadow: 0 0 8px #9fe8ff; }
 .lowfx #vignette { display: none; }
+
+/* ───────── Chests ───────── */
+.pity { padding: 10px 12px; font-size: 13px; line-height: 1.4; color: #d8d0e8; }
+.chest-card { padding: 12px; border-color: color-mix(in srgb, var(--cc) 55%, var(--edge)); }
+.chest-card .chest-img { width: 64px; height: 52px; image-rendering: pixelated; flex: none; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--cc) 60%, transparent)); }
+.chest-card .t { font-family: var(--head); font-weight: 700; font-size: 17px; }
+.chest-card .d { font-size: 13px; color: var(--muted); line-height: 1.3; }
+.odds { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 8px; }
+.chest-card .btn { font-size: 12px; padding: 8px 6px; }
+.chest-stage { position: relative; width: 220px; height: 180px; display: flex; align-items: center; justify-content: center; }
+.chest-stage .beams { opacity: 0; transition: opacity 0.4s; }
+.chest-open.lit .chest-stage .beams { opacity: 0.8; }
+.chest-big { width: 160px; height: 128px; image-rendering: pixelated; cursor: pointer; position: relative; filter: drop-shadow(0 0 20px var(--glow)); }
+.chest-big.shake { animation: chestshake 0.5s ease-in-out infinite; }
+@keyframes chestshake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg) scale(1.03); } 75% { transform: rotate(4deg) scale(1.03); } }
+.chest-big.pop { animation: chestpop 0.5s cubic-bezier(.2,1.6,.4,1); }
+@keyframes chestpop { 0% { transform: scale(0.8); filter: brightness(3); } 100% { transform: scale(1); } }
+.chest-loot { width: 100%; max-width: 380px; display: flex; justify-content: center; }
+.chest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; width: 100%; }
+.cg { text-align: center; }
+.cg .slot { width: 64px; height: 64px; margin: 0 auto; display: flex; cursor: pointer; }
+.cgn { font-family: var(--head); font-size: 11px; font-weight: 700; margin-top: 4px; line-height: 1.15; }
+.cgr { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }

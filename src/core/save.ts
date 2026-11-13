@@ -35,11 +35,15 @@ export interface SaveData {
     homecomings: number;
   };
   tutorial: Record<string, boolean>;
-  settings: { sfx: number; music: number; shake: boolean; damageNumbers: boolean; haptics: boolean };
+  settings: { sfx: number; music: number; shake: boolean; damageNumbers: boolean; haptics: boolean; effects: 'high' | 'low'; textScale: number; flashes: boolean };
   tier: number;
   maxTier: number;
   savedAt: number;
   activeRun: RunSnapshot | null;
+  mastery: Record<string, number>;
+  spec: Record<string, string>;
+  modes: { bestWave: number; bossRushWins: number; ascendedWins: number; trials: string[]; dailyDone: string };
+  objectives: { day: number; week: number; daily: Record<string, number>; weekly: Record<string, number>; claimed: string[] };
   merchant: { stock: Item[]; refreshes: number; seedRun: number };
 }
 
@@ -62,11 +66,15 @@ function defaults(): SaveData {
     codex: { enemies: {}, bosses: {}, reactions: [], powers: [], bases: [starter.base], lore: [] },
     stats: { runs: 0, victories: 0, deaths: 0, bestAct: 0, totalKills: 0, bestTimeVictory: 0, homecomings: 0 },
     tutorial: {},
-    settings: { sfx: 0.7, music: 0.4, shake: true, damageNumbers: true, haptics: true },
+    settings: { sfx: 0.7, music: 0.4, shake: true, damageNumbers: true, haptics: true, effects: 'high', textScale: 1, flashes: true },
     tier: 1,
     maxTier: 1,
     savedAt: 0,
     activeRun: null,
+    mastery: {},
+    spec: {},
+    modes: { bestWave: 0, bossRushWins: 0, ascendedWins: 0, trials: [], dailyDone: '' },
+    objectives: { day: 0, week: 0, daily: {}, weekly: {}, claimed: [] },
     merchant: { stock: [], refreshes: 0, seedRun: -1 },
   };
 }
@@ -177,6 +185,11 @@ export interface RunSnapshot {
   mutationPending: boolean;
   roomDone: boolean;
   usedNodes: number[];
+  mode?: import('../data/modes').ModeId;
+  endAct?: number;
+  modifiers?: string[];
+  trialId?: string;
+  wave?: number;
 }
 
 let lastBackup = 0;

@@ -55,7 +55,7 @@ export interface Item {
   isNew?: boolean;
 }
 
-export type RoomType = 'combat' | 'elite' | 'treasure' | 'shrine' | 'merchant' | 'event' | 'boss' | 'start';
+export type RoomType = 'combat' | 'elite' | 'treasure' | 'shrine' | 'merchant' | 'event' | 'boss' | 'start' | 'arena';
 
 export interface MapNode {
   id: number;

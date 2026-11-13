@@ -56,6 +56,21 @@ export const MUTATIONS: MutationDef[] = [
   { id: 'hunted', name: 'Hunted', icon: 'm_eye', power: 'hunted',
     boon: 'Each combat room has a Champion that drops loot', bane: 'Champions are relentless and deal +40% damage',
     mods: () => [] },
+  { id: 'echostrike', name: 'Echo Strike', icon: 'm_echo', power: 'echoStrike',
+    boon: 'Basic attacks echo for 50% damage 0.4s later', bane: '-15% attack speed',
+    mods: (s) => [{ stat: 'attackSpeed', type: 'mul', v: -0.15 * s }] },
+  { id: 'phase', name: 'Phase Momentum', icon: 'm_wind', power: 'phaseMomentum',
+    boon: 'Dodging grants +30% damage and +25% speed for 2s', bane: '-15% max HP',
+    mods: (s) => [{ stat: 'maxHp', type: 'mul', v: -0.15 * s }] },
+  { id: 'voidres', name: 'Void Resonance', icon: 'm_prism', power: 'voidResonance',
+    boon: 'Every 3rd special also unleashes a void blast (400% damage)', bane: '+20% ability cooldown',
+    mods: (s) => [{ stat: 'abilityCooldown', type: 'mul', v: 0.2 * s }] },
+  { id: 'overcharge', name: 'Overcharge', icon: 'm_bolt', power: 'overcharge',
+    boon: 'Combo finishers deal +150% damage', bane: 'Each finisher costs 4% of your current HP',
+    mods: () => [] },
+  { id: 'temporal', name: 'Temporal Fracture', icon: 'm_crack', power: 'temporal',
+    boon: 'Perfect dodges slow time for 1.5s', bane: '+25% dodge cooldown',
+    mods: (s) => [{ stat: 'dodgeCooldown', type: 'mul', v: 0.25 * s }] },
 ];
 
 export interface SynergyDef {
@@ -73,6 +88,8 @@ export const SYNERGIES: SynergyDef[] = [
   { id: 'resound', name: 'Resounding Echo', a: 'overcharged', b: 'echo', desc: 'The echo deals full damage instead of 60%.' },
   { id: 'gildedhunt', name: 'Bounty Hunter', a: 'gilded', b: 'hunted', desc: 'Champions drop triple gold and an extra Rift Shard.' },
   { id: 'stormrunner', name: 'Storm Runner', a: 'frenzy', b: 'thornbound', desc: 'Dodging through enemies damages them.' },
+  { id: 'riftdancer', name: 'Rift Dancer', a: 'phase', b: 'temporal', desc: 'Perfect dodges fully refresh your dodge.' },
+  { id: 'resonantecho', name: 'Resonant Echo', a: 'echostrike', b: 'voidres', desc: 'Void blasts trigger twice.' },
 ];
 
 export const getMutation = (id: string): MutationDef => {

@@ -6,6 +6,8 @@ import type { Boss } from '../game/entities/boss';
 import { getMutation, SYNERGIES } from '../data/mutations';
 import { ELEMENTS } from '../data/elements';
 import { LAYERS_PER_ACT } from '../game/run';
+import { ROMAN } from '../data/modes';
+import { BIOMES } from '../data/biomes';
 import { audio } from '../core/audio';
 
 type Handlers = { pause: () => void; map: () => void };
@@ -91,6 +93,7 @@ export class Hud {
       <div class="joy"><div class="knob"></div></div>
       <div class="joy-hint">Drag to move</div>
       <div class="abil special"><div class="cd"></div><span class="sic">${icon('spiral', 'lg')}</span><span class="lbl">SPECIAL</span><span class="cdnum"></span><span class="key">E</span></div>
+      <div class="combo-pips"><i></i><i></i><i></i><b>FINISHER</b></div>
       <div class="abil dodge"><div class="cd"></div>${icon('dodge', 'md')}<span class="lbl">DODGE</span><span class="cdnum"></span><span class="key">SPACE</span></div>
     </div>`);
     ui.appendChild(this.controls);
@@ -215,9 +218,9 @@ export class Hud {
 
   setRoom(scene: RunScene) {
     const run = scene.run;
-    const names = ['I', 'II', 'III'];
-    this.room.querySelector('[data-r=room]')!.textContent = `Act ${names[run.act]}`;
-    this.room.querySelector('[data-r=act]')!.textContent = `Room ${run.node.layer + 1} / ${LAYERS_PER_ACT}`;
+    const label = run.mode === 'endless' ? 'Endless' : run.mode === 'bossrush' ? `Boss ${run.act + 1} / 5` : `Act ${ROMAN[run.act]}`;
+    this.room.querySelector('[data-r=room]')!.textContent = label;
+    this.room.querySelector('[data-r=act]')!.textContent = run.mode === 'endless' ? `Wave ${run.wave}` : run.mode === 'bossrush' ? BIOMES[run.act].name : `Room ${run.node.layer + 1} / ${LAYERS_PER_ACT}`;
   }
 
   update(scene: RunScene) {
@@ -230,6 +233,10 @@ export class Hud {
     this.hpBar.classList.toggle('low', frac < 0.3);
     this.gold.textContent = String(Math.floor(run.gold));
     this.shards.textContent = String(run.shards);
+    if (run.has('timed')) {
+      const left = Math.max(0, 300 - run.elapsed);
+      this.room.querySelector('[data-r=act]')!.textContent = `⏳ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+    } else if (run.mode === 'endless') this.room.querySelector('[data-r=act]')!.textContent = `Wave ${run.wave}`;
 
     const p = scene.player;
     if (p) {
@@ -248,6 +255,11 @@ export class Hud {
       this.dodgeBtn.querySelector<HTMLElement>('.cd')!.style.setProperty('--p', dp * 100 + '%');
       this.dodgeBtn.classList.toggle('cooling', dp > 0);
       this.dodgeReady = dp <= 0;
+      const pips = this.controls.querySelector('.combo-pips')!;
+      const ch = p.chainT > 0 ? p.chain : 0;
+      pips.querySelectorAll('i').forEach((el, i) => el.classList.toggle('on', i < ch));
+      pips.classList.toggle('ready', ch >= 3);
+      pips.classList.toggle('counter', p.counterT > 0);
     }
 
     // mutations

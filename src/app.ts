@@ -12,7 +12,13 @@ export const App = {
     writeSave(this.save);
   },
   applySettings() {
-    audio.setVolumes(this.save.settings.sfx, this.save.settings.music);
+    const st = this.save.settings;
+    audio.setVolumes(st.sfx, st.music);
+    const app = document.getElementById('app');
+    if (app) {
+      app.style.setProperty('--ts', String(st.textScale ?? 1));
+      app.classList.toggle('lowfx', st.effects === 'low');
+    }
   },
   vibrate(ms: number) {
     if (!this.save.settings.haptics) return;

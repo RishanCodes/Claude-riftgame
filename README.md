@@ -79,6 +79,48 @@ Design decisions:
 - **Procedural art with a shared outline pass**, so everything (characters, enemies, bosses,
   props, UI icons) has one cohesive pixel-art style without external assets.
 
+## RIFTBOUND — The Ascension Update
+
+**Combat**
+- **Perfect dodge**: roll through an attack to trigger a brief slow-motion, refund half your dodge cooldown
+  and arm a **counterattack** (next hit: guaranteed crit, double damage, staggers the enemy).
+- **Combo finishers**: every 4th basic attack in a chain (shown as pips above the dodge button) is a
+  hero-specific finisher — Swordsman 360° sweep, Assassin triple flurry, Mage triple burst, Archer piercing
+  power shot, Guardian stunning quake, Summoner spirit volley. Finishers stagger normal enemies.
+- **Stagger**: heavy hits interrupt enemy wind-ups.
+
+**Smarter enemies** — personalities (aggressive / defensive / tactical / adaptive): melee enemies fan out to
+flank instead of stacking, tactical shooters and higher Rift Tiers lead their shots, defensive casters retreat
+when hurt, adaptive enemies wait out your dodge, Void Hounds coordinate pack lunges, Rift Chaplains shield and
+heal allies, Astral Sentinels raise mirror wards that reflect projectiles (more often against ranged heroes).
+
+**New content**
+- Two new regions with environmental hazards: **Fractured Citadel** (unstable floor eruptions that hurt
+  enemies too) and **Astral Crucible** (drifting gravity wells).
+- 8 new enemies: Rift Knight (directional shield, guard break), Warp Stalker (teleports behind you), Rift
+  Chaplain (support), Void Hound (pack), Star Weaver (leading laser lines), Void Mite (exploding swarm),
+  Gravity Lurker (gravity wells), Astral Sentinel (adaptive, reflective ward).
+- 2 new three-phase bosses: **The Shattered King** (follow-up cleaves, mirror reflections, throne shockwaves
+  with gaps) and **The Astral Arbiter** (constellation beams, gravity collapse, Judgment quadrants).
+- 10 boss-exclusive relics with build-defining powers (e.g. Crown of the Shattered King repeats finishers,
+  Frozen Vow freezes enemies on perfect dodge, Herald's Eye doubles a special every 10s, Orrery Pendant
+  orbiting stars, Astral Carapace gravity pulse).
+- 5 new Rift Mutations (Echo Strike, Phase Momentum, Void Resonance, Overcharge, Temporal Fracture) + 2 synergies.
+
+**Modes** (Rift Portal): The Rift (story) · **Ascended Expedition** (Acts IV–V) · **Endless Survival** (boss every
+5 waves, milestone rewards, best wave) · **Boss Rush** (all five bosses, guaranteed relic) · **Challenge Trials**
+(5 rule sets, first-clear rewards) · **Daily Rift** (rules rotate by local date). Locked modes show how to unlock them.
+
+**Progression**
+- **Hero Mastery** (levels 1–10 per hero, +2% damage/HP per level) and a **Specialization** choice at mastery 3
+  (2 per hero, e.g. Bladestorm/Duelist, Phantom/Venomancer, Pyromancer/Archmage, Sharpshooter/Volley,
+  Juggernaut/Earthshaker, Swarm/Beastlord).
+- **Rift Craft** at the Blacksmith: craft any discovered item (and boss relics once the boss is defeated) —
+  an achievable path to duplicates for star ranks.
+- **Daily & weekly objectives** in the Guild (local, no penalty for missed days).
+- Settings: effects quality (Low disables ambient particles and thins effects), text size, screen flashes.
+- Results screen: **Play Again** restarts the same mode.
+
 ## RIFTBOUND 3.0 — quality & balance
 
 - **Saving**: local save (localStorage) with a rotating backup and corruption recovery, plus a

@@ -16,6 +16,7 @@ import { compareHTML, discoverItem, itemDetailsHTML, itemTile } from './itemview
 import { BIOMES } from '../data/biomes';
 import { pick, chance } from '../core/rng';
 import { LAYERS_PER_ACT } from '../game/run';
+import { ROMAN, MODES, getModifier } from '../data/modes';
 import type { StatKey } from '../core/types';
 
 const RARITY_NAMES = ['Common', 'Rare', 'Epic'];
@@ -304,7 +305,7 @@ export const RunUI = {
       const muts = Object.entries(run.mutations);
       const syns = SYNERGIES.filter((sy) => run.mutations[sy.a] && run.mutations[sy.b]);
       s.innerHTML = `<div class="screen-title">Paused</div>
-        <div class="screen-sub">${BIOMES[run.act].name} · Room ${run.node.layer + 1}/${LAYERS_PER_ACT} · ${fmtTime(run.elapsed)} · ${run.kills} kills · Tier ${run.tier}</div>
+        <div class="screen-sub">${MODES.find((m) => m.id === run.mode)!.name} · ${BIOMES[run.act].name} · ${run.mode === 'endless' ? 'Wave ' + run.wave : 'Room ' + (run.node.layer + 1) + '/' + LAYERS_PER_ACT}${run.modifiers.length ? ' · ' + run.modifiers.map((m) => getModifier(m).name).join(', ') : ''} · ${fmtTime(run.elapsed)} · ${run.kills} kills · Tier ${run.tier}</div>
         <div class="panel" style="width:100%;max-width:420px;padding:14px">
           <div class="section-title">Attributes</div>
           <div class="statgrid">
@@ -399,7 +400,7 @@ export const RunUI = {
 
   actTransition(act: number) {
     const b = BIOMES[act];
-    const s = openScreen(`<div class="spacer"></div><div class="screen-title" style="font-size:32px">Act ${['I', 'II', 'III'][act]}</div><div class="screen-sub">${esc(b.name)}<br>${esc(b.subtitle)}</div><div class="spacer"></div>`);
+    const s = openScreen(`<div class="spacer"></div><div class="screen-title" style="font-size:32px">${App.run?.mode === 'bossrush' ? 'Next Guardian' : 'Act ' + ROMAN[act]}</div><div class="screen-sub">${esc(b.name)}<br>${esc(b.subtitle)}</div><div class="spacer"></div>`);
     s.style.pointerEvents = 'none';
     setTimeout(() => closeScreen(s), 1800);
   },

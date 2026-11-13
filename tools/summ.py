@@ -5,7 +5,7 @@ for r in rows:
   k=(r['tier'],r['cls']); e='room' if r['enc']=='combat' else r['enc']
   agg[k][e+'_t'].append(r['t']); agg[k][e+'_hp'].append(r['hpPctPerMin'])
 print(f"{'tier':5} {'class':9} {'room s':>7} {'elite s':>7} {'boss s':>7} | {'room':>5} {'elite':>5} {'boss':>5}  (maxHP lost/min)")
-for tier in ['start','mid','elem','late']:
+for tier in ['start','mid','elem','late','asc4','asc5']:
   for c in ['swordsman','assassin','mage','archer','guardian','summoner']:
     a=agg.get((tier,c))
     if not a: continue

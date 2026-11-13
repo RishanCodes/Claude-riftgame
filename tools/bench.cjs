@@ -7,6 +7,8 @@ const LOAD = {
   start: { act: 0, rarity: 0, stars: 1, bless: [] },
   mid: { act: 1, rarity: 1, stars: 2, bless: ['keen', 'keen', 'swift', 'vital', 'precision'] },
   elem: { act: 1, rarity: 1, stars: 2, bless: ['infuse_fire', 'infuse_lightning', 'infuse_water', 'resonance', 'keen', 'swift'] },
+  asc4: { act: 3, rarity: 3, stars: 3, bless: ['keen', 'keen', 'keen', 'swift', 'swift', 'vital', 'vital', 'vital', 'precision', 'precision', 'brutal', 'ironskin', 'ironskin'] },
+  asc5: { act: 4, rarity: 3, stars: 4, bless: ['keen', 'keen', 'keen', 'keen', 'swift', 'swift', 'swift', 'vital', 'vital', 'vital', 'precision', 'precision', 'brutal', 'ironskin', 'ironskin', 'ironskin'] },
   late: { act: 2, rarity: 2, stars: 3, bless: ['keen', 'keen', 'keen', 'swift', 'swift', 'vital', 'vital', 'precision', 'precision', 'brutal', 'ironskin'] },
 };
 (async () => {
@@ -23,12 +25,12 @@ const LOAD = {
     const r = await p.evaluate(async ({ cls, enc, L }) => {
       const R = window.__riftbound; const s = R.App.save;
       R.selectClass(s, cls);
-      const pool = { swordsman: { 0: 's_longsword', 1: 's_ember', 2: 's_bloodthorn' }, assassin: { 0: 'a_shadow', 1: 'a_venom', 2: 'a_phantom' }, mage: { 0: 'm_apprentice', 1: 'm_storm', 2: 'm_codex' }, archer: { 0: 'b_hunter', 1: 'b_thornwood', 2: 'b_storm' }, guardian: { 0: 'g_iron', 1: 'g_bastion', 2: 'g_thunder' }, summoner: { 0: 'u_totem', 1: 'u_wisp', 2: 'u_beast' } }[cls];
+      const pool = { swordsman: { 0: 's_longsword', 1: 's_ember', 2: 's_bloodthorn', 3: 's_celestial' }, assassin: { 0: 'a_shadow', 1: 'a_venom', 2: 'a_phantom', 3: 'a_void' }, mage: { 0: 'm_apprentice', 1: 'm_storm', 2: 'm_codex', 3: 'm_astral' }, archer: { 0: 'b_hunter', 1: 'b_thornwood', 2: 'b_storm', 3: 'b_moon' }, guardian: { 0: 'g_iron', 1: 'g_bastion', 2: 'g_thunder', 3: 'g_titan' }, summoner: { 0: 'u_totem', 1: 'u_wisp', 2: 'u_beast', 3: 'u_celestial' } }[cls];
       const w = R.generateItem({ rarity: L.rarity, base: pool[L.rarity] }); w.stars = L.stars; w.affixes = []; s.inventory.push(w); s.equipped.weapon = w.id;
       for (const sl of ['armor', 'helmet', 'boots', 'ring', 'amulet']) s.equipped[sl] = null;
-      const run = new R.RunState(s);
+      const run = new R.RunState(s, L.act >= 3 ? { mode: 'ascended' } : {});
       run.blessings = {}; run.elementOrder = [];
-      for (let i = 0; i < L.act; i++) run.advanceAct();
+      for (let i = L.act >= 3 ? 3 : 0; i < L.act; i++) run.advanceAct();
       for (const bl of L.bless) run.addBlessing(bl);
       run.recompute(); run.hp = run.stats.maxHp;
       const node = enc === 'boss' ? run.map.nodes[run.map.nodes.length - 1] : run.map.nodes.find((n) => n.layer === 3);

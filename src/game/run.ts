@@ -6,6 +6,7 @@ import { ELEMENT_LIST } from '../data/elements';
 import { generateItem, rollRarity } from '../data/items';
 import { computeStats } from './stats';
 import type { SaveData, RunSnapshot } from '../core/save';
+import { getModifier, type ModeId } from '../data/modes';
 
 export const ACTS = 3;
 export const LAYERS_PER_ACT = 6; // layer 0 start, 1-4 mixed, 5 boss
@@ -93,6 +94,12 @@ export interface RunSummary {
   items: Item[];
   renown: number;
   bossesSlain: string[];
+  wave: number;
+  mode: ModeId;
+}
+
+export function singleMap(act: number, type: 'boss' | 'arena'): ActMap {
+  return { act, layers: 1, nodes: [{ id: 0, layer: 0, col: 0, type, next: [], visited: true }] };
 }
 
 export class RunState {
@@ -121,15 +128,40 @@ export class RunState {
   newReactions: string[] = [];
   roomDone = false;
   usedNodes: number[] = [];
+  mode: ModeId = 'story';
+  endAct = 2;
+  modifiers: string[] = [];
+  trialId = '';
+  wave = 0;
+  // per-run counters for objectives / results
+  perfects = 0;
+  finishers = 0;
+  reactionsTriggered = 0;
+  elitesKilled = 0;
 
-  constructor(save: SaveData) {
+  constructor(save: SaveData, opts: { mode?: ModeId; act?: number; modifiers?: string[]; trialId?: string } = {}) {
     this.save = save;
     this.tier = save.tier;
-    this.map = generateActMap(0);
+    this.mode = opts.mode ?? 'story';
+    this.modifiers = opts.modifiers ?? [];
+    this.trialId = opts.trialId ?? '';
+    const m = this.mode;
+    this.act = m === 'ascended' ? 3 : m === 'endless' ? 4 : opts.act ?? 0;
+    this.endAct = m === 'story' ? 2 : m === 'ascended' || m === 'bossrush' ? 4 : this.act;
+    this.map = m === 'bossrush' ? singleMap(this.act, 'boss') : m === 'endless' ? singleMap(4, 'arena') : generateActMap(this.act);
     this.map.nodes[0].visited = true;
     this.rerolls = save.talents.insight ?? 0;
+    for (const id of this.modifiers) {
+      const md = getModifier(id);
+      if (md?.mods) this.extraMods.push(...md.mods);
+    }
     this.recompute();
     this.hp = this.stats.maxHp;
+    if (this.modifiers.includes('mutated')) for (const mu of this.mutationOffers().slice(0, 2)) this.addMutation(mu.id);
+    if (this.modifiers.includes('commonOnly')) for (let i = 0; i < 2; i++) {
+      const o = this.blessingOffers(1, true)[0];
+      if (o) this.addBlessing(o.id);
+    }
     const head = save.talents.headstart ?? 0;
     for (let i = 0; i < head; i++) {
       const opts = this.blessingOffers(1, false);
@@ -142,6 +174,8 @@ export class RunState {
     return this.map.nodes[this.nodeId];
   }
   get depth(): number {
+    if (this.mode === 'endless') return 12 + Math.floor(this.wave / 2);
+    if (this.mode === 'bossrush') return this.act * LAYERS_PER_ACT + 5;
     return this.act * LAYERS_PER_ACT + this.node.layer;
   }
 
@@ -163,17 +197,22 @@ export class RunState {
   /** Difficulty multipliers for enemies in the current room. */
   difficulty(): { hp: number; dmg: number; speed: number } {
     const d = this.depth;
-    const actHp = [1, 1.25, 1.55][this.act] ?? 1.55;
-    const actDmg = [1, 1.25, 1.5][this.act] ?? 1.5;
+    const actHp = [1, 1.25, 1.55, 1.9, 2.25][this.act] ?? 2.25;
+    const actDmg = [1, 1.25, 1.5, 1.7, 1.9][this.act] ?? 1.9;
     let hp = (1 + d * 0.06) * actHp * (1 + (this.tier - 1) * 0.35);
-    const dmg = (1 + d * 0.03) * actDmg * (1 + (this.tier - 1) * 0.2);
+    let dmg = (1 + d * 0.03) * actDmg * (1 + (this.tier - 1) * 0.2);
     let speed = 1 + (this.tier - 1) * 0.03;
     if (this.mutations.gilded) hp *= 1 + 0.3 * (this.mutations.gilded > 1 ? 1.5 : 1);
     if (this.mutations.frenzy) speed *= 1.25;
+    if (this.mode === 'endless') {
+      hp *= 1 + this.wave * 0.1;
+      dmg *= 1 + this.wave * 0.04;
+    }
     return { hp, dmg, speed };
   }
 
   heal(amount: number, ignoreModifiers = false): number {
+    if (this.has('noHeal')) return 0;
     const mult = ignoreModifiers ? 1 : this.stats.healing;
     const before = this.hp;
     this.hp = Math.min(this.stats.maxHp, this.hp + amount * mult);
@@ -234,12 +273,17 @@ export class RunState {
     return [els[0], els[1]];
   }
 
+  has(mod: string) {
+    return this.modifiers.includes(mod);
+  }
+
   advanceAct(): boolean {
-    if (this.act >= ACTS - 1) return false;
+    if (this.act >= this.endAct) return false;
     this.act++;
     this.usedNodes = [];
     this.roomDone = false;
-    this.map = generateActMap(this.act);
+    this.map = this.mode === 'bossrush' ? singleMap(this.act, 'boss') : generateActMap(this.act);
+    if (this.mode === 'bossrush') this.heal(this.stats.maxHp * 0.35, true);
     this.nodeId = 0;
     this.map.nodes[0].visited = true;
     return true;
@@ -252,13 +296,16 @@ export class RunState {
       extraMods: this.extraMods.map((m) => ({ ...m })), elementOrder: [...this.elementOrder], gold: this.gold, shards: this.shards,
       kills: this.kills, elapsed: this.elapsed, itemIds: this.itemsFound.map((i) => i.id), bossesSlain: [...this.bossesSlain],
       rerolls: this.rerolls, phoenixUsed: this.phoenixUsed, mutationPending: this.mutationPending, roomDone, usedNodes: [...this.usedNodes],
+      mode: this.mode, endAct: this.endAct, modifiers: [...this.modifiers], trialId: this.trialId, wave: this.wave,
     };
   }
 
   /** Rebuild a run from a checkpoint (resumes at the start of the saved room, or after it if it was cleared). */
   static restore(save: SaveData, sn: RunSnapshot): RunState {
-    const r = new RunState(save);
+    const r = new RunState(save, { mode: sn.mode ?? 'story', act: sn.act, modifiers: sn.modifiers ?? [], trialId: sn.trialId });
     r.tier = sn.tier;
+    r.endAct = sn.endAct ?? 2;
+    r.wave = sn.wave ?? 0;
     r.act = sn.act;
     r.map = sn.map;
     r.nodeId = sn.nodeId;
@@ -284,7 +331,7 @@ export class RunState {
   }
 
   summary(victory: boolean): RunSummary {
-    const renown = Math.round(this.roomsCleared * 6 + this.kills * 0.5 + this.bossesSlain.length * 60 + (victory ? 150 : 0));
+    const renown = Math.round(this.roomsCleared * 6 + this.kills * 0.5 + this.bossesSlain.length * 60 + (victory ? 150 : 0) + this.wave * 10);
     return {
       victory,
       act: this.act,
@@ -296,6 +343,8 @@ export class RunState {
       items: this.itemsFound,
       renown,
       bossesSlain: this.bossesSlain,
+      wave: this.wave,
+      mode: this.mode,
     };
   }
 }

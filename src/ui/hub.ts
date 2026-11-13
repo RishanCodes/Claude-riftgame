@@ -16,12 +16,15 @@ import { confirmDialog, el, esc, fmtTime, onAct, uiRoot } from './dom';
 import { compareHTML, discoverItem, itemDetailsHTML, itemTile, SLOT_NAMES, starStr } from './itemview';
 import { stacks, canRankUp, rankUp, protectedIds, weaponClass, type Stack } from '../game/inventory';
 import { Cloud } from '../core/cloud';
+import { MODES, TRIALS, dailyFor, getModifier, masteryLevel, ROMAN, SPEC_LEVEL, specsFor, MASTERY_XP, type ModeId } from '../data/modes';
+import { objectives, claim, unclaimedCount } from '../game/objectives';
+import { BASES as ALL_BASES } from '../data/items';
 import { exportSave, importSave } from '../core/save';
 import { category, MAX_STARS, rankBonusText, rankCost, stackKey, starsOf } from '../data/items';
 import { getClass } from '../data/classes';
 import { selectClass } from '../core/save';
 
-type Flow = { startRun: () => void; continueRun: () => boolean; forfeitRun: () => unknown };
+type Flow = { startRun: (o?: { mode?: ModeId; act?: number; modifiers?: string[]; trialId?: string }) => void; continueRun: () => boolean; forfeitRun: () => unknown };
 let flow: Flow = { startRun: () => {}, continueRun: () => false, forfeitRun: () => null };
 export function bindHubFlow(f: Flow) {
   flow = f;
@@ -169,7 +172,7 @@ export const HubUI = {
           <div class="bld panel" data-act="hall">${icon('b_hall', 'lg')}<div class="nm">Equipment</div><div class="sub">${stacks(s).length} kinds</div>${newItems ? '<span class="dot"></span>' : ''}</div>
           <div class="bld panel" data-act="smith">${icon('b_smith', 'lg')}<div class="nm">Blacksmith</div><div class="sub">Forge gear</div></div>
           <div class="bld panel" data-act="merchant">${icon('b_merchant', 'lg')}<div class="nm">Merchant</div><div class="sub">${s.merchant.stock.length} wares</div></div>
-          <div class="bld panel" data-act="guild">${icon('b_guild', 'lg')}<div class="nm">Guild</div><div class="sub">Talents</div>${affordableTalent ? '<span class="dot"></span>' : ''}</div>
+          <div class="bld panel" data-act="guild">${icon('b_guild', 'lg')}<div class="nm">Guild</div><div class="sub">Talents</div>${affordableTalent || unclaimedCount() ? '<span class="dot"></span>' : ''}</div>
           <div class="bld panel" data-act="codex">${icon('b_codex', 'lg')}<div class="nm">Codex</div><div class="sub">Lore</div></div>
           <div class="bld panel" data-act="heroes"><img class="px-icon lg" src="${spriteUrl('pl_' + s.selectedClass + '_0')}" style="height:46px;width:40px"><div class="nm">Hero Hall</div><div class="sub">6 heroes</div></div>
         </div>
@@ -232,54 +235,85 @@ export const HubUI = {
   },
 
   // ───────────────────────── Rift Portal ─────────────────────────
-  portal() {
+  portal(view = 'modes') {
     const s = App.save;
     const st = computeStats(s).stats;
     const cls = CLASSES.find((c) => c.id === s.selectedClass)!;
+    const unlocked: Record<ModeId, boolean> = {
+      story: true, trial: true,
+      ascended: s.stats.victories > 0, bossrush: s.stats.victories > 0,
+      endless: s.stats.bestAct >= 2, daily: s.stats.runs > 0,
+    };
+    const daily = dailyFor();
     const tiers = Array.from({ length: s.maxTier }, (_, i) => i + 1);
-    const body = `
-      <div class="flavor">The portal stone hums. Beyond it, three Acts of shifting chambers wait: ${BIOMES.map((b) => `<b style="color:#fff">${b.name}</b>`).join(', ')}.</div>
-      <div class="section-title">Adventurer</div>
-      <div class="li panel"><img src="${spriteUrl('pl_' + cls.id + '_0')}" style="width:46px;height:52px;image-rendering:pixelated">
-        <div class="grow"><div class="t" style="color:${cls.color}">${cls.name}</div><div class="d">${cls.title} · Power ${powerScore(st)}</div></div>
-        <button class="btn small" data-act="hero">Change</button></div>
-      <div class="statgrid" style="margin-top:10px">
-        <div><span class="muted">Max HP</span><span>${st.maxHp}</span></div><div><span class="muted">Damage</span><span>${st.damage.toFixed(0)}</span></div>
-        <div><span class="muted">Attack Speed</span><span>${st.attackSpeed.toFixed(2)}/s</span></div><div><span class="muted">Crit</span><span>${Math.round(st.critChance * 100)}%</span></div>
-        <div><span class="muted">Armor</span><span>${st.armor.toFixed(0)}</span></div><div><span class="muted">Move</span><span>${st.moveSpeed.toFixed(0)}</span></div>
-      </div>
-      <div class="section-title">Rift Tier</div>
-      <div class="tier-pick">${tiers.map((t) => `<button class="btn small ${t === s.tier ? 'on' : ''}" data-act="tier" data-t="${t}">${['I', 'II', 'III', 'IV', 'V'][t - 1] ?? t}</button>`).join('')}</div>
-      <div class="muted center" style="font-size:13px;margin-top:6px">${s.maxTier < 5 ? 'Complete a run to unlock the next tier. ' : ''}Higher tiers: tougher enemies, more gold and better loot.</div>
-      <div class="section-title">Records</div>
-      <div class="statgrid">
-        <div><span class="muted">Runs</span><span>${s.stats.runs}</span></div><div><span class="muted">Victories</span><span>${s.stats.victories}</span></div>
-        <div><span class="muted">Furthest Act</span><span>${s.stats.bestAct ? ['I', 'II', 'III'][s.stats.bestAct - 1] : '—'}</span></div><div><span class="muted">Best Time</span><span>${s.stats.bestTimeVictory ? fmtTime(s.stats.bestTimeVictory) : '—'}</span></div>
-      </div>`;
-    const sh = sheet('Rift Portal', 'b_portal', body, `<button class="btn primary block" data-act="go">Enter the Rift<span class="shine"></span></button>`);
+    let body = '';
+    if (view === 'modes') {
+      body = `<div class="li panel"><img src="${spriteUrl('pl_' + cls.id + '_0')}" style="width:40px;height:46px;image-rendering:pixelated">
+          <div class="grow"><div class="t" style="color:${cls.color}">${cls.name}</div><div class="d">Power ${powerScore(st)} · Mastery ${masteryLevel(s.mastery[cls.id] ?? 0).level}</div></div>
+          <button class="btn small" data-act="hero">Change</button></div>
+        <div class="section-title">Rift Tier <span class="muted" style="text-transform:none;letter-spacing:0">· tougher enemies, better loot</span></div>
+        <div class="tier-pick">${tiers.map((t) => `<button class="btn small ${t === s.tier ? 'on' : ''}" data-act="tier" data-t="${t}">${ROMAN[t - 1]}</button>`).join('')}</div>
+        ${s.maxTier < 5 ? '<div class="muted center" style="font-size:12px;margin-top:4px">Win a Story run at your highest tier to unlock the next.</div>' : ''}
+        <div class="section-title">Choose your path</div>
+        <div class="list">${MODES.map((m) => {
+          const ok = unlocked[m.id];
+          const extra = m.id === 'endless' ? ` · Best: wave ${s.modes.bestWave}` : m.id === 'daily' ? ` · Today: ${daily.modifiers.map((x) => getModifier(x).name).join(' + ')}, Act ${ROMAN[daily.act]}${s.modes.dailyDone === daily.key ? ' · <b class="good">cleared</b>' : ''}` : m.id === 'trial' ? ` · ${s.modes.trials.length}/${TRIALS.length} cleared` : m.id === 'bossrush' ? ` · Wins: ${s.modes.bossRushWins}` : '';
+          return `<div class="li panel mode-card ${ok ? '' : 'locked'}" data-act="${ok ? 'mode-' + m.id : 'lockedmode'}">${icon(m.icon, 'lg')}
+            <div class="grow"><div class="t">${m.name}</div><div class="d">${m.desc}${extra}</div>${ok ? '' : `<div class="d bad">🔒 ${m.unlock}</div>`}</div><span class="chev">${ok ? '›' : ''}</span></div>`;
+        }).join('')}</div>`;
+    } else {
+      body = `<div class="flavor">Short one-Act runs with special rules. Clearing a trial for the first time pays Rift Shards and an Epic item.</div>
+        <div class="list">${TRIALS.map((t) => {
+          const ok = s.stats.bestAct >= t.needAct;
+          const done = s.modes.trials.includes(t.id);
+          return `<div class="li panel mode-card ${ok ? '' : 'locked'}" data-act="${ok ? 'trial-' + t.id : 'lockedmode'}">
+            <div class="grow"><div class="t">${t.name} ${done ? '<span class="good" style="font-size:12px">✓ cleared</span>' : ''}</div>
+            <div class="d">Act ${ROMAN[t.act]}: ${BIOMES[t.act].name}</div>
+            ${t.modifiers.map((m) => `<div class="d"><b style="color:#fff">${getModifier(m).name}:</b> ${getModifier(m).desc}</div>`).join('')}
+            <div class="d gold-text">First clear: +${t.reward} Rift Shards + Epic item</div>${ok ? '' : `<div class="d bad">🔒 Reach Act ${ROMAN[t.needAct - 1]} in a Story run</div>`}</div><span class="chev">${ok ? '›' : ''}</span></div>`;
+        }).join('')}</div>`;
+    }
+    const sh = sheet(view === 'modes' ? 'Rift Portal' : 'Challenge Trials', 'b_portal', body);
+    const go = (o: { mode?: ModeId; act?: number; modifiers?: string[]; trialId?: string }) => {
+      if (s.activeRun) {
+        sh.remove();
+        return void this.newRunConfirm();
+      }
+      audio.unlock();
+      audio.play('door');
+      sh.remove();
+      this.hide();
+      flow.startRun(o);
+    };
     onAct(sh, (act, t) => {
-      if (act === 'close') return closeSheet(sh);
+      if (act === 'close') {
+        if (view !== 'modes') {
+          sh.remove();
+          return this.portal();
+        }
+        return closeSheet(sh);
+      }
       if (act === 'hero') {
         sh.remove();
         return this.heroes();
       }
+      if (act === 'lockedmode') return audio.play('uiBack');
       if (act === 'tier') {
         s.tier = Number(t.dataset.t);
         App.persist();
         audio.play('ui');
         sh.remove();
-        this.portal();
+        return this.portal(view);
       }
-      if (act === 'go') {
-        if (s.activeRun) {
-          sh.remove();
-          return void this.newRunConfirm();
-        }
-        audio.unlock();
-        audio.play('door');
+      if (act === 'mode-trial') {
         sh.remove();
-        this.hide();
-        flow.startRun();
+        return this.portal('trials');
+      }
+      if (act === 'mode-daily') return go({ mode: 'daily', act: daily.act, modifiers: daily.modifiers });
+      if (act.startsWith('mode-')) return go({ mode: act.slice(5) as ModeId });
+      if (act.startsWith('trial-')) {
+        const tr = TRIALS.find((x) => x.id === act.slice(6))!;
+        return go({ mode: 'trial', act: tr.act, modifiers: tr.modifiers, trialId: tr.id });
       }
     });
   },
@@ -306,6 +340,18 @@ export const HubUI = {
       </div>
       <div class="panel ability" style="--hc:${c.color}"><div class="eyebrow">Active · ${c.special.cooldown}s cooldown</div><div class="t">${c.special.name}</div><div class="d">${esc(c.special.desc)}</div></div>
       <div class="panel ability" style="--hc:${c.color}"><div class="eyebrow">Passive</div><div class="t">${c.passive.name}</div><div class="d">${esc(c.passive.desc)}</div></div>
+      ${(() => {
+        const xp = s.mastery[c.id] ?? 0;
+        const m = masteryLevel(xp);
+        const pct = m.next ? (m.into / (m.next - MASTERY_XP[m.level - 1])) * 100 : 100;
+        const specs = specsFor(c.id);
+        const cur = s.spec[c.id];
+        return `<div class="panel mastery" style="--hc:${c.color}"><div class="row"><div class="grow"><div class="eyebrow">Hero Mastery</div><div class="t">Level ${m.level}${m.level >= 10 ? ' · Max' : ''}</div></div><div class="d">+${(m.level - 1) * 2}% damage & HP</div></div>
+          <div class="hpbar" style="height:8px;margin-top:6px"><div class="fill" style="width:${pct}%;background:linear-gradient(180deg,${c.color},#3a2a6a)"></div></div>
+          <div class="d muted" style="margin-top:4px">${m.next ? `${m.into} / ${m.next - MASTERY_XP[m.level - 1]} XP · earn XP by playing this hero` : 'Mastered'}</div>
+          <div class="section-title" style="margin:12px 0 6px">Specialization ${m.level < SPEC_LEVEL ? `<span class="muted" style="text-transform:none;letter-spacing:0">· unlocks at mastery ${SPEC_LEVEL}</span>` : ''}</div>
+          <div class="spec-grid">${specs.map((sp) => `<button class="spec ${cur === sp.id ? 'on' : ''} ${m.level < SPEC_LEVEL ? 'disabled' : ''}" data-act="spec-${sp.id}"><b>${sp.name}</b><span>${esc(sp.desc)}</span>${cur === sp.id ? '<i>Active</i>' : ''}</button>`).join('')}</div></div>`;
+      })()}
       <div class="bars big" style="--hc:${c.color}"><span>Health</span>${bar(c.rating.hp)}<span>Damage</span>${bar(c.rating.dmg)}<span>Speed</span>${bar(c.rating.speed)}<span>Range</span>${bar(c.rating.range)}<span>Defense</span>${bar(c.rating.def)}</div>`;
     const foot = sel
       ? `<button class="btn block disabled">${c.name} selected</button>`
@@ -329,6 +375,17 @@ export const HubUI = {
         audio.play('ui');
         sh.remove();
         return this.heroes(Number(act.slice(3)));
+      }
+      if (act.startsWith('spec-')) {
+        if (masteryLevel(s.mastery[c.id] ?? 0).level < SPEC_LEVEL || s.activeRun) return audio.play('uiBack');
+        s.spec[c.id] = act.slice(5);
+        App.persist();
+        audio.play('blessing');
+        const y = sh.querySelector('.sheet-body')!.scrollTop;
+        sh.remove();
+        this.heroes(idx);
+        uiRoot().querySelector('.sheet .sheet-body')!.scrollTop = y;
+        return;
       }
       if (act === 'pick' && !s.activeRun) {
         selectClass(s, c.id);
@@ -485,20 +542,78 @@ export const HubUI = {
   },
 
   // ───────────────────────── Blacksmith ─────────────────────────
-  smith() {
+  smith(tab = 'forge') {
     const s = App.save;
+    if (tab === 'craft') return this.craft();
     const equippedIds = new Set(Object.values(s.equipped).filter(Boolean));
     const reps = stacks(s).map((g) => g.rep).sort((a, b) => Number(equippedIds.has(b.id)) - Number(equippedIds.has(a.id)) || RARITY_SORT(a, b));
     const body = `<div class="flavor">"Bring me coin and rift-shards, and I’ll make that steel sing." — Brannoc, Smith of Emberfall</div>
       <div class="panel" style="padding:10px;font-size:14px;line-height:1.4">Forging raises an item’s level (up to +${MAX_ITEM_LEVEL}): <b>+12% primary stats</b> and <b>+5% bonus stats</b> per level. It stacks with star ranks from duplicates.</div>
       <div class="section-title">Your gear · equipped first</div>
       <div class="inv big">${reps.map((i) => itemTile(i, '', 'open').replace('</div>', equippedIds.has(i.id) ? '<span class="eq">E</span></div>' : '</div>')).join('')}</div>`;
-    const sh = sheet('Blacksmith', 'b_smith', body);
+    const sh = sheet('Blacksmith', 'b_smith', body, '', tabBtns([['forge', 'Forge'], ['craft', 'Rift Craft']], 'forge'));
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
+      if (act === 'tab-craft') {
+        sh.remove();
+        return this.craft();
+      }
       if (act === 'open') {
         const it = s.inventory.find((x) => x.id === t.dataset.id);
         if (it) this.forgeDrawer(it, sh);
+      }
+    });
+  },
+
+  /** Rift Craft: build any discovered fixed-rarity item, so key gear never depends on luck alone. */
+  craft(filter = 'mine') {
+    const s = App.save;
+    const known = ALL_BASES.filter((b) => b.rarity !== undefined && (s.codex.bases.includes(b.id) || (b.exclusive && (s.codex.bosses[b.exclusive] ?? 0) > 0)));
+    const list = known.filter((b) => filter === 'all' || !b.cls || b.cls === s.selectedClass).sort((a, b) => (a.rarity ?? 0) - (b.rarity ?? 0));
+    const cost = (r: number) => ({ gold: Math.round(RARITY[r].price * 1.5), shards: [2, 4, 10, 25, 60][r] });
+    const body = `<div class="flavor">"Show me what you’ve seen in the rift, and I’ll forge another." Craft any item you have discovered — duplicates feed star ranks. Boss relics unlock once that boss is defeated.</div>
+      <div class="filters"><button class="btn ghost ${filter === 'mine' ? 'on' : ''}" data-act="cf-mine">Usable by ${getClass(s.selectedClass).name}</button><button class="btn ghost ${filter === 'all' ? 'on' : ''}" data-act="cf-all">All</button></div>
+      <div class="list">${list.map((b) => {
+        const c = cost(b.rarity!);
+        const can = s.gold >= c.gold && s.shards >= c.shards;
+        return `<div class="li panel shop-row" data-act="craftview" data-b="${b.id}">${icon(b.icon, 'md')}<div class="grow"><div class="t" style="color:${RARITY[b.rarity!].color}">${esc(b.name)}${b.exclusive ? ' <span class="gold-text" style="font-size:11px">RELIC</span>' : ''}</div><div class="d">${RARITY[b.rarity!].name} ${SLOT_NAMES[b.slot]}${b.cls ? ' · ' + getClass(b.cls).name : ''} · own ×${s.inventory.filter((i) => i.base === b.id).length}</div></div>
+          <span class="price ${can ? '' : 'bad'}">${c.gold}${icon('coin', 'sm')} ${c.shards}${icon('shard', 'sm')}</span></div>`;
+      }).join('') || '<div class="empty">Discover items in the rift to unlock crafting recipes.</div>'}</div>`;
+    const sh = sheet('Blacksmith', 'b_smith', body, '', tabBtns([['forge', 'Forge'], ['craft', 'Rift Craft']], 'craft'));
+    onAct(sh, (act, t) => {
+      if (act === 'close') return closeSheet(sh);
+      if (act === 'tab-forge') {
+        sh.remove();
+        return this.smith();
+      }
+      if (act.startsWith('cf-')) {
+        sh.remove();
+        return this.craft(act.slice(3));
+      }
+      if (act === 'craftview') {
+        const b = ALL_BASES.find((x) => x.id === t.dataset.b)!;
+        const sample = generateItem({ rarity: b.rarity!, base: b.id });
+        sample.affixes = [];
+        const c = cost(b.rarity!);
+        const can = s.gold >= c.gold && s.shards >= c.shards;
+        const dr = itemDrawer(sample, {
+          tabs: ['details'],
+          actions: `<button class="btn gold ${can ? '' : 'disabled'}" data-act="make">Craft · ${c.gold} ${icon('coin', 'sm')} ${c.shards} ${icon('shard', 'sm')}</button>`,
+          body: () => itemDetailsHTML(sample) + '<div class="muted center" style="font-size:12px">Bonus affixes are rolled when crafted.</div>',
+          onAct: (a) => {
+            if (a !== 'make' || s.gold < c.gold || s.shards < c.shards) return;
+            s.gold -= c.gold;
+            s.shards -= c.shards;
+            const it = generateItem({ rarity: b.rarity!, base: b.id });
+            s.inventory.push(it);
+            discoverItem(it);
+            App.persist();
+            audio.play('chest');
+            dr.remove();
+            sh.remove();
+            this.craft(filter);
+          },
+        });
       }
     });
   },
@@ -528,10 +643,19 @@ export const HubUI = {
   },
 
   // ───────────────────────── Guild ─────────────────────────
-  guild(tab = 'talents') {
+  guild(tab = unclaimedCount() ? 'objectives' : 'talents') {
     const s = App.save;
     const r = renownLevel(s.renown);
-    const body = tab === 'talents'
+    const ob = objectives();
+    const objRow = (o: ReturnType<typeof objectives>['daily'][number]) => `<div class="li panel"><div class="grow"><div class="t">${o.def.text}</div>
+      <div class="hpbar" style="height:8px;margin:5px 0 2px"><div class="fill" style="width:${(o.progress / o.def.goal) * 100}%;background:linear-gradient(180deg,#9fe8b0,#2a8a5a)"></div></div>
+      <div class="d">${o.progress} / ${o.def.goal} · Reward: ${o.def.reward.shards ? o.def.reward.shards + ' shards' : o.def.reward.gold + ' gold'}</div></div>
+      ${o.claimed ? '<span class="muted head" style="font-size:12px">Claimed</span>' : `<button class="btn small gold ${o.done ? '' : 'disabled'}" data-act="claim" data-k="${o.def.id}">Claim</button>`}</div>`;
+    const body = tab === 'objectives'
+      ? `<div class="flavor">New daily goals every day and weekly goals every week, tracked across all modes. Missing a day costs nothing.</div>
+        <div class="section-title">Today</div><div class="list">${ob.daily.map(objRow).join('')}</div>
+        <div class="section-title">This week</div><div class="list">${ob.weekly.map(objRow).join('')}</div>`
+      : tab === 'talents'
       ? `<div class="li panel"><div>${icon('star', 'lg')}</div><div class="grow"><div class="t">Renown Level ${r.level}</div>
           <div class="hpbar" style="height:10px;margin-top:4px;border-color:#5a4a2a"><div class="fill" style="width:${(r.into / r.need) * 100}%;background:linear-gradient(180deg,#ffe08a,#c8902a)"></div></div>
           <div class="d">${r.into} / ${r.need} renown · earned by clearing rooms and slaying bosses</div></div></div>
@@ -549,17 +673,29 @@ export const HubUI = {
           <div><span class="muted">Deaths</span><span>${s.stats.deaths}</span></div><div><span class="muted">Enemies slain</span><span>${s.stats.totalKills}</span></div>
           <div><span class="muted">Furthest Act</span><span>${s.stats.bestAct || '—'}</span></div><div><span class="muted">Best victory</span><span>${s.stats.bestTimeVictory ? fmtTime(s.stats.bestTimeVictory) : '—'}</span></div>
           <div><span class="muted">Highest tier</span><span>${s.maxTier}</span></div><div><span class="muted">Items owned</span><span>${s.inventory.length}</span></div>
+          <div><span class="muted">Best Endless wave</span><span>${s.modes.bestWave}</span></div><div><span class="muted">Boss Rush wins</span><span>${s.modes.bossRushWins}</span></div>
+          <div><span class="muted">Ascended wins</span><span>${s.modes.ascendedWins}</span></div><div><span class="muted">Trials cleared</span><span>${s.modes.trials.length}/${TRIALS.length}</span></div>
           <div><span class="muted">Reactions found</span><span>${s.codex.reactions.length}/${REACTIONS.length}</span></div><div><span class="muted">Lore pages</span><span>${s.codex.lore.length}/${LORE.length}</span></div>
         </div>
         <div class="section-title">Bosses defeated</div>
         <div class="list">${BOSSES.map((b) => `<div class="li panel"><div class="grow"><div class="t">${s.codex.bosses[b.id] ? b.name : '???'}</div><div class="d">${BIOMES[b.biome].name}</div></div><b>${s.codex.bosses[b.id] ?? 0}×</b></div>`).join('')}</div>`;
-    const sh = sheet('Adventurer Guild', 'b_guild', body, '', tabBtns([['talents', 'Talents'], ['records', 'Records']], tab));
+    const unc = unclaimedCount();
+    const sh = sheet('Adventurer Guild', 'b_guild', body, '', tabBtns([['objectives', `Objectives${unc ? ' •' + unc : ''}`], ['talents', 'Talents'], ['records', 'Records']], tab));
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
       if (act.startsWith('tab-')) {
         audio.play('ui');
         sh.remove();
         return this.guild(act.slice(4));
+      }
+      if (act === 'claim') {
+        const o = [...ob.daily, ...ob.weekly].find((x) => x.def.id === t.dataset.k);
+        if (o && claim(o)) {
+          audio.play('legendary');
+          sh.remove();
+          return this.guild('objectives');
+        }
+        return;
       }
       if (act === 'buy') {
         const td = TALENTS.find((x) => x.id === t.dataset.id)!;
@@ -714,14 +850,17 @@ export const HubUI = {
   // ───────────────────────── Settings ─────────────────────────
   settings() {
     const st = App.save.settings;
-    const sw = (k: 'shake' | 'damageNumbers' | 'haptics', label: string) =>
+    const sw = (k: 'shake' | 'damageNumbers' | 'haptics' | 'flashes', label: string) =>
       `<div class="toggle"><span>${label}</span><div class="switch ${st[k] ? 'on' : ''}" data-act="sw-${k}"></div></div>`;
     const body = `
       <div class="section-title">Audio</div>
       <div class="row"><span style="width:90px">Effects</span><input type="range" class="slider" min="0" max="1" step="0.05" value="${st.sfx}" data-set="sfx"></div>
       <div class="row"><span style="width:90px">Music</span><input type="range" class="slider" min="0" max="1" step="0.05" value="${st.music}" data-set="music"></div>
       <div class="section-title">Gameplay</div>
-      ${sw('shake', 'Screen shake')}${sw('damageNumbers', 'Damage numbers')}${sw('haptics', 'Vibration (where supported)')}
+      ${sw('shake', 'Screen shake')}${sw('damageNumbers', 'Damage numbers')}${sw('haptics', 'Vibration (where supported)')}${sw('flashes', 'Screen flashes')}
+      <div class="section-title">Graphics & Accessibility</div>
+      <div class="toggle"><span>Effects quality</span><div class="row"><button class="btn small ${st.effects === 'high' ? 'on' : ''}" data-act="fx-high">High</button><button class="btn small ${st.effects === 'low' ? 'on' : ''}" data-act="fx-low">Low</button></div></div>
+      <div class="toggle"><span>Text size</span><div class="row">${[[0.9, 'S'], [1, 'M'], [1.15, 'L']].map(([v, n]) => `<button class="btn small ${st.textScale === v ? 'on' : ''}" data-act="ts-${v}">${n}</button>`).join('')}</div></div>
       <div class="section-title">Controls</div>
       <div class="muted" style="line-height:1.5;font-size:14px"><b>Touch:</b> drag anywhere on the lower screen to move; tap DODGE and SPECIAL.<br><b>Keyboard:</b> WASD/Arrows move · Space/Shift dodge · E/Q special · Esc/P pause.<br>Attacks are automatic when an enemy is in reach.</div>
       <div class="section-title">Save Data</div>
@@ -744,8 +883,17 @@ export const HubUI = {
     );
     onAct(sh, async (act, t) => {
       if (act === 'close') return closeSheet(sh);
+      if (act.startsWith('fx-') || act.startsWith('ts-')) {
+        if (act.startsWith('fx-')) st.effects = act.slice(3) as 'high' | 'low';
+        else st.textScale = Number(act.slice(3));
+        App.applySettings();
+        App.persist();
+        audio.play('ui');
+        sh.remove();
+        return this.settings();
+      }
       if (act.startsWith('sw-')) {
-        const k = act.slice(3) as 'shake' | 'damageNumbers' | 'haptics';
+        const k = act.slice(3) as 'shake' | 'damageNumbers' | 'haptics' | 'flashes';
         st[k] = !st[k];
         t.classList.toggle('on', st[k]);
         App.persist();

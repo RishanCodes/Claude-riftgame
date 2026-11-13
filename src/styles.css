@@ -441,3 +441,26 @@ h1, h2, h3, .head { font-family: var(--head); letter-spacing: 0.04em; margin: 0;
 /* HUD readability */
 .abil .cdnum { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--head); font-weight: 900; font-size: 22px; color: #fff; text-shadow: 0 0 4px #000, 0 0 2px #000; pointer-events: none; }
 .hpbar { height: 22px; }
+
+/* ───────── Ascension ───────── */
+.sheet-body, .screen, .drawer-body, .tipbox { zoom: var(--ts, 1); }
+.mode-card { cursor: pointer; align-items: flex-start; }
+.mode-card .px-icon { flex: none; }
+.mode-card.locked { opacity: 0.55; }
+.mastery { padding: 12px; margin-top: 10px; border-left: 3px solid var(--hc); }
+.mastery .t { font-family: var(--head); font-weight: 700; font-size: 17px; color: #fff; }
+.mastery .d { font-size: 13px; color: var(--muted); }
+.spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.spec { text-align: left; padding: 10px; border-radius: 10px; background: rgba(0,0,0,0.35); border: 1px solid var(--edge); color: var(--text); font-family: var(--body); display: flex; flex-direction: column; gap: 4px; cursor: pointer; position: relative; min-height: 44px; }
+.spec b { font-family: var(--head); font-size: 14px; color: #fff; }
+.spec span { font-size: 12px; color: #cfc8e0; line-height: 1.3; }
+.spec i { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 10px; color: var(--gold); font-weight: 800; }
+.spec.on { border-color: var(--hc); box-shadow: 0 0 0 1px var(--hc), 0 0 14px color-mix(in srgb, var(--hc) 40%, transparent); }
+.spec.disabled { opacity: 0.45; }
+.combo-pips { position: absolute; right: calc(110px + var(--sar)); bottom: calc(150px + var(--sab)); display: flex; gap: 4px; align-items: center; pointer-events: none; }
+.combo-pips i { width: 10px; height: 10px; border-radius: 3px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.3); transform: rotate(45deg); }
+.combo-pips i.on { background: var(--gold); border-color: #fff0a0; box-shadow: 0 0 6px var(--gold); }
+.combo-pips b { font-family: var(--head); font-size: 10px; color: var(--gold); opacity: 0; text-shadow: 0 0 4px #000; margin-left: 2px; }
+.combo-pips.ready b { opacity: 1; }
+.combo-pips.counter i { border-color: #9fe8ff; box-shadow: 0 0 8px #9fe8ff; }
+.lowfx #vignette { display: none; }

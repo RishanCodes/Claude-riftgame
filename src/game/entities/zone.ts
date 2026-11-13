@@ -1,7 +1,7 @@
 import type { Element } from '../../core/types';
 import type { RunScene } from '../scenes/RunScene';
 
-export type ZoneKind = 'fire' | 'magma' | 'mire' | 'blizzard' | 'spore' | 'firestorm' | 'tempest' | 'ember' | 'heal';
+export type ZoneKind = 'fire' | 'magma' | 'mire' | 'blizzard' | 'spore' | 'firestorm' | 'tempest' | 'ember' | 'heal' | 'gravity';
 
 export interface ZoneOpts {
   x: number;
@@ -29,6 +29,7 @@ const COLORS: Record<ZoneKind, [number, number]> = {
   tempest: [0xb6f5c8, 0xffe04a],
   ember: [0xff5a1f, 0xffb04a],
   heal: [0x5affb0, 0xc8ffe8],
+  gravity: [0x3a4a8a, 0x9fd8ff],
 };
 
 export class Zone {
@@ -128,6 +129,16 @@ export class Zone {
       return;
     }
     const pulse = 1 + Math.sin(this.age * 6) * 0.04;
+    if (this.kind === 'gravity') {
+      for (let i = 0; i < 4; i++) {
+        const rr = this.r * (1 - ((this.age * 0.6 + i / 4) % 1));
+        g.lineStyle(2, i % 2 ? c2 : c1, 0.55 * a * (rr / this.r));
+        g.strokeCircle(this.x, this.y, rr);
+      }
+      g.fillStyle(0x05060c, 0.35 * a);
+      g.fillCircle(this.x, this.y, this.r * 0.25);
+      return;
+    }
     if (this.kind === 'firestorm' || this.kind === 'tempest') {
       for (let i = 0; i < 3; i++) {
         const rot = this.age * (5 + i) + i * 2;

@@ -70,6 +70,12 @@ export class Enemy {
   dotTick = 0;
   lastHitBy: 'attack' | 'other' = 'other';
   tint = 0xffffff;
+  flankA = Math.random() * Math.PI * 2;
+  faceA = 0;
+  ward = 0;
+  shieldHits = 0;
+  hitFrom = 0;
+  guardDown = 0;
 
   constructor(scene: RunScene, def: EnemyDef, x: number, y: number, mult: { hp: number; dmg: number; speed: number }) {
     this.scene = scene;
@@ -236,7 +242,8 @@ export class Enemy {
     }
     // facing
     const p = this.scene.player;
-    if (!this.isBoss && !this.def.stationary) {
+    if (this.def.behavior === 'knight') this.sprite.setFlipX(Math.cos(this.faceA) < 0);
+    else if (!this.isBoss && !this.def.stationary) {
       const want = this.vx !== 0 ? Math.sign(this.vx) : Math.sign(p.x - this.x) || 1;
       if (Math.abs(this.vx) > 5) this.facing = want;
       this.sprite.setFlipX(this.facing < 0 !== this.defaultFacesLeft());
@@ -292,7 +299,52 @@ export class Enemy {
   setState(st: string, t: number) {
     this.state = st;
     this.stateT = 0;
+    if (st === 'windup') t *= this.windupScale();
     this.aiT = t;
+  }
+
+  /** Personality + difficulty shape how long attacks are telegraphed (never below 70%). */
+  windupScale(): number {
+    const s = this.scene;
+    let k = 1;
+    if (this.personality === 'aggressive') k *= 0.88;
+    if (this.elite || this.champion) k *= 0.9;
+    if (s.run.tier >= 3) k *= 0.92;
+    // adaptive enemies wait out your dodge before committing
+    if (this.personality === 'adaptive' && s.player.dodgeT > 0) k *= 1.35;
+    return Math.max(0.7, k);
+  }
+
+  get personality() {
+    return this.def.personality ?? (['ranged', 'caster', 'seer'].includes(this.def.behavior) ? 'tactical' : ['chaser', 'crawler', 'leaper', 'wisp'].includes(this.def.behavior) ? 'aggressive' : 'defensive');
+  }
+
+  /** Aim at where the target will be (tactical enemies, elites, higher tiers and later acts). */
+  aim(t: { x: number; y: number }, speed: number): number {
+    const s = this.scene;
+    const lead = this.personality === 'tactical' || this.elite || s.run.tier >= 2 || s.run.act >= 3;
+    if (!lead || t !== (s.player as unknown)) return angleTo(this.x, this.y, t.x, t.y);
+    const p = s.player;
+    const tt = dist(this.x, this.y, p.x, p.y) / speed;
+    const k = 0.75; // imperfect on purpose so strafing still works
+    return angleTo(this.x, this.y, p.x + p.vx * tt * k, p.y + p.vy * tt * k);
+  }
+
+  /** Melee approach that fans out around the target instead of stacking in a line. */
+  approach(t: { x: number; y: number }, mult = 1) {
+    const d = dist(this.x, this.y, t.x, t.y);
+    if (d > 70) {
+      const r = Math.min(60, d * 0.5);
+      this.moveToward(t.x + Math.cos(this.flankA) * r, t.y + Math.sin(this.flankA) * r, mult);
+    } else this.moveToward(t.x, t.y, mult);
+  }
+
+  /** Ranged enemies with a defensive streak back off and regroup when hurt. */
+  fleeing(t: { x: number; y: number }): boolean {
+    if (this.personality !== 'defensive' || this.hp / this.maxHp > 0.35 || this.isBoss) return false;
+    if (dist(this.x, this.y, t.x, t.y) > 230) return false;
+    this.moveAway(t.x, t.y, 1.1);
+    return true;
   }
 
   ai(dt: number) {
@@ -304,12 +356,16 @@ export class Enemy {
     const shotSpeed = 150 + s.run.act * 15;
     switch (this.def.behavior) {
       case 'chaser': {
-        this.moveToward(t.x, t.y);
+        this.approach(t);
         break;
       }
       case 'ranged': {
         // Thornling: keep distance, telegraph glow, shoot
         if (this.state === 'move') {
+          if (this.fleeing(t)) {
+            if (this.aiT <= 0) this.setState('windup', 0.45);
+            break;
+          }
           if (d < 140) this.moveAway(t.x, t.y, 0.9);
           else if (d > 240) this.moveToward(t.x, t.y);
           else {
@@ -320,7 +376,7 @@ export class Enemy {
         } else if (this.state === 'windup') {
           this.stop();
           if (this.aiT <= 0) {
-            const a = angleTo(this.x, this.y, t.x, t.y);
+            const a = this.aim(t, shotSpeed + 30);
             const n = this.elite ? 3 : 1;
             for (let i = 0; i < n; i++)
               s.enemyShot(this.x, this.y, a + (i - (n - 1) / 2) * 0.22, shotSpeed + 30, this.dmg, 'p_thorn', 4);
@@ -458,7 +514,7 @@ export class Enemy {
         } else if (this.state === 'windup') {
           this.stop(0.3);
           if (this.aiT <= 0) {
-            const a = angleTo(this.x, this.y, t.x, t.y);
+            const a = this.aim(t, shotSpeed + 20);
             const n = this.elite ? 5 : 3;
             for (let i = 0; i < n; i++) s.enemyShot(this.x, this.y, a + (i - (n - 1) / 2) * 0.28, shotSpeed + 20, this.dmg, 'p_ice', 4, { chill: true });
             s.sfx('shoot');
@@ -553,11 +609,220 @@ export class Enemy {
         }
         break;
       }
+      case 'knight': {
+        this.guardDown -= dt;
+        // shield turns toward you slowly; flank it
+        const want = angleTo(this.x, this.y, t.x, t.y);
+        let dA = want - this.faceA;
+        while (dA > Math.PI) dA -= Math.PI * 2;
+        while (dA < -Math.PI) dA += Math.PI * 2;
+        this.faceA += Math.max(-2.4 * dt, Math.min(2.4 * dt, dA));
+        if (this.state === 'move') {
+          this.approach(t, 0.9);
+          if (this.shieldHits >= 4) {
+            // guard break: it counter-slams, but its shield stays down for 2.5s
+            this.shieldHits = 0;
+            this.guardDown = 2.5;
+            s.fx.floatText(this.x, this.y - this.r - 14, 'GUARD BREAK', '#ffcf5a', 11);
+            const sx = this.x;
+            const sy = this.y;
+            this.setState('windup', 0.4);
+            s.addTelegraph(new Telegraph({ kind: 'circle', x: sx, y: sy, r: 58 }, 0.4, 0xc87cff, () => {
+              s.aoeEnemy(sx, sy, 58, this.dmg);
+              s.fx.ring(sx, sy, 58, 0xc87cff);
+            }, this));
+          } else if (this.aiT <= 0 && d < 150) {
+            this.data.la = angleTo(this.x, this.y, t.x, t.y);
+            this.setState('windup', 0.55);
+            s.addTelegraph(new Telegraph({ kind: 'line', x1: this.x, y1: this.y, x2: this.x + Math.cos(this.data.la) * 120, y2: this.y + Math.sin(this.data.la) * 120, w: 26 }, 0.55 * this.windupScale(), 0xc87cff, () => {}, this));
+          }
+        } else if (this.state === 'windup') {
+          this.stop(0.3);
+          if (this.aiT <= 0) this.setState(this.data.la !== undefined ? 'charge' : 'move', 0.28);
+        } else if (this.state === 'charge') {
+          this.faceA = this.data.la;
+          this.vx = Math.cos(this.data.la) * 420;
+          this.vy = Math.sin(this.data.la) * 420;
+          if (this.aiT <= 0) {
+            this.data.la = undefined as unknown as number;
+            this.setState('move', rand(2.6, 3.4));
+          }
+        }
+        break;
+      }
+      case 'stalker': {
+        if (this.state === 'move') {
+          this.approach(t, 1);
+          if (this.aiT <= 0) {
+            // vanish and reappear behind the player
+            const p = s.player;
+            const back = p.facing + Math.PI;
+            const bx = Math.max(s.bounds.x + 20, Math.min(s.bounds.r - 20, p.x + Math.cos(back) * 46));
+            const by = Math.max(s.bounds.y + 20, Math.min(s.bounds.b - 20, p.y + Math.sin(back) * 46));
+            s.fx.burst(this.x, this.y, 0xa25cff, 10, 100);
+            this.spawnT = 0.8;
+            this.x = bx;
+            this.y = by;
+            s.addTelegraph(new Telegraph({ kind: 'circle', x: bx, y: by, r: 40 }, 0.8, 0xa25cff, () => {
+              s.aoeEnemy(bx, by, 40, this.dmg);
+              s.fx.slash(bx, by, angleTo(bx, by, s.player.x, s.player.y), 40, false, 0xc87cff);
+            }, this));
+            this.setState('move', rand(3, 4));
+          }
+        }
+        break;
+      }
+      case 'chaplain': {
+        if (!this.fleeing(t)) {
+          if (d < 150) this.moveAway(t.x, t.y, 0.9);
+          else if (d > 230) this.moveToward(t.x, t.y, 0.8);
+          else this.stop(0.1);
+        }
+        if (this.aiT <= 0) {
+          const allies = s.enemies.filter((e) => e !== this && e.alive && !e.isBoss && dist(e.x, e.y, this.x, this.y) < 240);
+          const ally = allies.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+          if (ally) {
+            if (ally.shielded <= 0) ally.shielded = 1.8;
+            ally.hp = Math.min(ally.maxHp, ally.hp + ally.maxHp * 0.08);
+            s.fx.lightning(this.x, this.y, ally.x, ally.y, 0xfff3c4);
+            s.fx.burst(ally.x, ally.y, 0xfff3c4, 8, 60);
+          } else s.enemyShot(this.x, this.y, this.aim(t, 160), 160, this.dmg, 'p_orb', 5, { tint: 0xfff3c4 });
+          this.aiT = rand(4.5, 5.5);
+        }
+        break;
+      }
+      case 'hound': {
+        // pack tactics: take a slot around the player, then lunge together
+        const pack = s.enemies.filter((e) => e.alive && e.def.behavior === 'hound');
+        const idx = pack.indexOf(this);
+        const slot = (idx / Math.max(1, pack.length)) * Math.PI * 2 + this.animT * 0.15;
+        if (this.state === 'move') {
+          this.moveToward(t.x + Math.cos(slot) * 85, t.y + Math.sin(slot) * 85, 1);
+          const ready = pack.filter((h) => dist(h.x, h.y, t.x, t.y) < 110).length;
+          if (this.aiT <= 0 && (ready >= Math.min(3, pack.length) || this.stateT > 4)) {
+            for (const h of pack) if (h.state === 'move' && dist(h.x, h.y, t.x, t.y) < 160) {
+              h.data.la = angleTo(h.x, h.y, t.x, t.y);
+              h.setState('windup', 0.4);
+            }
+          }
+        } else if (this.state === 'windup') {
+          this.stop(0.4);
+          this.flashT = Math.sin(this.stateT * 30) > 0 ? 0.02 : 0;
+          if (this.aiT <= 0) this.setState('dive', 0.3);
+        } else if (this.state === 'dive') {
+          this.vx = Math.cos(this.data.la) * 420;
+          this.vy = Math.sin(this.data.la) * 420;
+          if (this.aiT <= 0) this.setState('move', rand(2.2, 3.2));
+        }
+        break;
+      }
+      case 'weaver': {
+        if (this.state === 'move') {
+          if (d < 170) this.moveAway(t.x, t.y, 0.9);
+          else if (d > 260) this.moveToward(t.x, t.y, 0.8);
+          else this.moveToward(this.x + Math.cos(this.animT) * 40, this.y + Math.sin(this.animT) * 40, 0.4);
+          if (this.aiT <= 0) {
+            const a = this.aim(t, 400);
+            const x2 = this.x + Math.cos(a) * 460;
+            const y2 = this.y + Math.sin(a) * 460;
+            const x1 = this.x;
+            const y1 = this.y;
+            this.setState('windup', 0.85);
+            s.addTelegraph(new Telegraph({ kind: 'line', x1, y1, x2, y2, w: 14 }, 0.85 * this.windupScale(), 0xfff3c4, () => {
+              const p = s.player;
+              if (distToSegment(p.x, p.y, x1, y1, x2, y2) < 7 + p.r) s.hurtPlayer(this.dmg, x1, y1, this);
+              s.fx.lightning(x1, y1, x2, y2, 0xfff3c4);
+              s.sfx('zap');
+            }, this));
+          }
+        } else if (this.state === 'windup') {
+          this.stop(0.4);
+          if (this.aiT <= 0) this.setState('move', rand(2.4, 3.2));
+        }
+        break;
+      }
+      case 'mite': {
+        if (this.state === 'move') {
+          this.moveToward(t.x, t.y, 1);
+          if (d < 46) this.setState('windup', 0.6);
+        } else if (this.state === 'windup') {
+          this.stop(0.5);
+          this.flashT = Math.sin(this.stateT * 40) > 0 ? 0.02 : 0;
+          if (this.aiT <= 0) {
+            s.aoeEnemy(this.x, this.y, 58, this.dmg);
+            s.fx.explosion(this.x, this.y, 58, 0xc87cff);
+            this.hp = 0;
+            s.killEnemy(this);
+          }
+        }
+        break;
+      }
+      case 'lurker': {
+        this.moveToward(t.x, t.y, 0.5);
+        if (this.aiT <= 0) {
+          this.data.n = (this.data.n ?? 0) + 1;
+          if (this.data.n % 2 === 1) {
+            const wx = t.x;
+            const wy = t.y;
+            s.addTelegraph(new Telegraph({ kind: 'circle', x: wx, y: wy, r: 70 }, 0.7, 0x5a7ac8, () => {
+              s.addZone({ x: wx, y: wy, r: 70, kind: 'gravity', team: 'enemy', dmg: this.dmg * 0.4, tick: 0.6, life: 3.5 });
+            }, this));
+          } else for (let i = 0; i < 3; i++) s.enemyShot(this.x, this.y, this.aim(t, 90) + (i - 1) * 0.35, 90, this.dmg, 'p_orb', 6, { homing: 0.8, life: 4, tint: 0x9fd8ff });
+          this.aiT = rand(2.4, 3);
+        }
+        break;
+      }
+      case 'sentinel': {
+        if (this.ward > 0) this.ward -= dt;
+        const ranged = ['mage', 'archer', 'summoner'].includes(s.player.cls);
+        if (this.state === 'move') {
+          this.approach(t, 0.9);
+          if (this.aiT <= 0) {
+            // adapts: wards against ranged heroes, bursts against melee
+            const r = Math.random();
+            if (r < (ranged ? 0.5 : 0.2)) {
+              this.ward = 2.4;
+              s.sfx('shield');
+              this.setState('move', 2.6);
+            } else if (r < 0.7 || d > 200) {
+              this.setState('windup', 0.5);
+              this.data.mv = 1;
+            } else {
+              this.data.la = angleTo(this.x, this.y, t.x, t.y);
+              this.data.mv = 2;
+              this.setState('windup', 0.6);
+              s.addTelegraph(new Telegraph({ kind: 'line', x1: this.x, y1: this.y, x2: this.x + Math.cos(this.data.la) * 220, y2: this.y + Math.sin(this.data.la) * 220, w: this.r * 2 }, 0.6 * this.windupScale(), 0x7ab0ff, () => {}, this));
+            }
+          }
+        } else if (this.state === 'windup') {
+          this.stop(0.4);
+          if (this.aiT <= 0) {
+            if (this.data.mv === 1) {
+              const n = 12;
+              const off = Math.random();
+              for (let i = 0; i < n; i++) s.enemyShot(this.x, this.y, off + (i / n) * Math.PI * 2, 140, this.dmg * 0.7, 'p_ice', 4, { tint: 0xffe04a });
+              this.setState('move', rand(2, 2.8));
+            } else this.setState('charge', 0.4);
+          }
+        } else if (this.state === 'charge') {
+          this.vx = Math.cos(this.data.la) * 480;
+          this.vy = Math.sin(this.data.la) * 480;
+          if (this.aiT <= 0) this.setState('move', rand(2, 2.8));
+        }
+        break;
+      }
     }
   }
 
   onWall() {
     if (this.state === 'charge') this.data.hitWall = 1;
+  }
+
+  /** Interrupt the current action (finishers, counters). */
+  stagger(t: number) {
+    if (this.isBoss || !this.alive) return;
+    this.st.stun = Math.max(this.st.stun, t);
+    if (this.state !== 'move') this.setState('move', 0.8);
   }
 
   takeKnockback(angle: number, force: number) {
@@ -593,8 +858,17 @@ export class Enemy {
   }
 
   /** Damage modifiers from statuses/shields/armor. */
-  damageTakenMult(): number {
+  damageTakenMult(counting = false): number {
     let m = 1 - this.armor;
+    if (this.def.behavior === 'knight' && this.state !== 'charge' && this.guardDown <= 0) {
+      let dA = this.hitFrom - this.faceA;
+      while (dA > Math.PI) dA -= Math.PI * 2;
+      while (dA < -Math.PI) dA += Math.PI * 2;
+      if (Math.abs(dA) < 1.0) {
+        m *= 0.3;
+        if (counting) this.shieldHits++;
+      }
+    }
     if (this.st.fracture > 0) m *= 1.15;
     if (this.st.frozen > 0) m *= 1.3;
     if (this.shielded > 0) m *= 0.2;

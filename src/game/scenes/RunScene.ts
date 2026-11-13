@@ -5,6 +5,7 @@ import { chance, dist, pick, rand, randInt, weighted } from '../../core/rng';
 import type { Element, Item, RoomType } from '../../core/types';
 import { BIOMES, type BiomeDef } from '../../data/biomes';
 import { getBoss } from '../../data/bosses';
+import { ROMAN } from '../../data/modes';
 import { ENEMIES, getEnemy } from '../../data/enemies';
 import { ELEMENTS } from '../../data/elements';
 import { RARITY } from '../../data/items';
@@ -21,6 +22,10 @@ import { drawFloor } from '../floor';
 import { UI } from '../../ui/ui';
 import { Input } from '../../ui/input';
 import { iconCanvasKey } from '../textures';
+import { track } from '../objectives';
+import { EXCLUSIVES_OF } from '../../data/gear';
+import { generateItem } from '../../data/items';
+import { angleTo } from '../../core/rng';
 
 interface Obstacle {
   x: number;
@@ -68,6 +73,7 @@ interface Timer {
 
 const ROOM_COLORS: Record<RoomType, number> = {
   start: 0x7fb4ff,
+  arena: 0xa25cff,
   combat: 0x7fb4ff,
   elite: 0xff5a5a,
   treasure: 0xffcf5a,
@@ -79,6 +85,7 @@ const ROOM_COLORS: Record<RoomType, number> = {
 
 export const ROOM_NAMES: Record<RoomType, string> = {
   start: 'Rift Entrance',
+  arena: 'Arena',
   combat: 'Battle',
   elite: 'Elite',
   treasure: 'Treasure',
@@ -127,6 +134,13 @@ export class RunScene extends Phaser.Scene {
   ambient?: Phaser.GameObjects.Particles.ParticleEmitter;
   tutorialStep = 0;
   ckT = 8;
+  arenaBreak = 0;
+  hazardT = 5;
+  timerStart = 0;
+  perfectCd = 0;
+  orbit: Phaser.GameObjects.Image[] = [];
+  orbitHit = new Map<Enemy, number>();
+  pulseT = 6;
 
   constructor() {
     super('Run');
@@ -214,6 +228,7 @@ export class RunScene extends Phaser.Scene {
   }
 
   setupAmbient() {
+    if (App.save.settings.effects === 'low') return;
     const kind = this.biome.ambient.kind;
     const color = this.biome.ambient.color;
     this.ambient = this.add.particles(0, 0, kind === 'leaves' ? 'fx_leaf' : 'fx_dot', {
@@ -289,7 +304,13 @@ export class RunScene extends Phaser.Scene {
     const run = this.run;
     const t = this.roomType;
     UI.hud.setRoom(this);
-    if (run.roomDone && t !== 'treasure' && t !== 'shrine' && t !== 'merchant' && t !== 'event') {
+    if (t === 'arena') {
+      this.roomState = 'fight';
+      this.waves = [];
+      this.arenaBreak = 2;
+      this.waveRewarded = run.wave > 0;
+      this.banner('Endless Survival', run.wave ? `Resuming at wave ${run.wave + 1}` : 'Survive as long as you can');
+    } else if (run.roomDone && t !== 'treasure' && t !== 'shrine' && t !== 'merchant' && t !== 'event') {
       // resumed after this room was already cleared
       this.roomState = 'cleared';
       this.banner('Run resumed', 'Choose your next path');
@@ -335,9 +356,11 @@ export class RunScene extends Phaser.Scene {
 
   buildWaves(t: RoomType): string[][] {
     const run = this.run;
+    if (run.has('allElite') && (t === 'combat' || t === 'start')) t = 'elite';
     const pool = this.biome.enemies.map(getEnemy);
     const prevPool = run.act > 0 ? BIOMES[run.act - 1].enemies.map(getEnemy) : [];
     let budget = t === 'start' ? 3.5 + run.act * 2 : 5 + run.depth * 0.7 + (run.tier - 1) * 1.2;
+    if (run.has('swarm')) budget *= 1.5;
     if (t === 'start' && run.act === 0 && !App.save.tutorial.basics) return [['slime', 'slime', 'slime']];
     const pickWave = (b: number): string[] => {
       const out: string[] = [];
@@ -412,9 +435,9 @@ export class RunScene extends Phaser.Scene {
     return e;
   }
 
-  spawnBoss() {
+  spawnBoss(id?: string) {
     this.pendingSpawns = Math.max(0, this.pendingSpawns - 1);
-    const bdef = getBoss(this.biome.boss);
+    const bdef = getBoss(id ?? this.biome.boss);
     const b = new Boss(this, bdef, this.W / 2, this.bounds.y + 140, this.run.difficulty());
     b.spawnT = 1.2;
     this.boss = b;
@@ -501,8 +524,18 @@ export class RunScene extends Phaser.Scene {
     this.updateDecoys(dt);
     this.fx.update(dt);
 
+    if (this.roomState === 'fight') {
+      this.hazardTick(dt);
+      if (this.roomType === 'arena') this.arenaTick(dt);
+      if (this.run.has('timed') && this.run.elapsed - this.timerStart > 300 && this.player.alive) {
+        this.banner('The rift collapses', 'Time ran out');
+        this.run.hp = 0;
+        this.onDeath();
+      }
+    }
+    this.orbitTick(dt);
     // clear check
-    if (this.roomState === 'fight' && this.waveIdx >= this.waves.length && this.pendingSpawns === 0 && this.enemies.length === 0 && !this.boss && this.combatTime > 0.5) {
+    if (this.roomState === 'fight' && this.roomType !== 'arena' && this.waveIdx >= this.waves.length && this.pendingSpawns === 0 && this.enemies.length === 0 && !this.boss && this.combatTime > 0.5) {
       this.onCleared();
     }
 
@@ -532,6 +565,18 @@ export class RunScene extends Phaser.Scene {
           if (!e.alive || pr.hit.has(e) || e.spawnT > 0) continue;
           if (dist(pr.x, pr.y, e.x, e.y) < pr.r + e.r) {
             pr.hit.add(e);
+            if (e.ward > 0) {
+              // Astral Sentinel mirror ward: reflect the shot back at the player
+              pr.team = 'enemy';
+              pr.vx *= -1;
+              pr.vy *= -1;
+              pr.dmg = e.dmg * 0.6;
+              pr.onHit = undefined;
+              pr.life = 1.5;
+              pr.sprite.setTint(0x9fd8ff);
+              this.fx.burst(pr.x, pr.y, 0x9fd8ff, 6, 90);
+              break;
+            }
             if (pr.onHit) pr.onHit(e, pr);
             else this.combat.hit(e, pr.dmg, { source: 'wave', canCrit: true, element: pr.element, kb: 60, kbAngle: Math.atan2(pr.vy, pr.vx) });
             if (pr.pierce-- <= 0) {
@@ -550,6 +595,27 @@ export class RunScene extends Phaser.Scene {
     for (const z of this.zones) {
       const tick = z.update(dt);
       if (!z.alive) continue;
+      if (z.kind === 'gravity' && z.delay <= 0) {
+        const pull = (x: number, y: number) => {
+          const d = dist(x, y, z.x, z.y);
+          return d < z.r && d > 6 ? (1 - d / z.r) * 220 * dt * 6 : 0;
+        };
+        const f = pull(p.x, p.y);
+        if (f && !p.dodging) {
+          const a = angleTo(p.x, p.y, z.x, z.y);
+          p.kx += Math.cos(a) * f;
+          p.ky += Math.sin(a) * f;
+        }
+        if (z.team === 'both') for (const e of this.enemies) {
+          const fe = pull(e.x, e.y);
+          if (fe && !e.isBoss) {
+            const a = angleTo(e.x, e.y, z.x, z.y);
+            e.kx += Math.cos(a) * fe * 0.7;
+            e.ky += Math.sin(a) * fe * 0.7;
+          }
+        }
+        if (z.team === 'both') continue;
+      }
       if (z.team !== 'enemy') {
         for (const e of this.enemies) {
           if (!e.alive) continue;
@@ -562,7 +628,7 @@ export class RunScene extends Phaser.Scene {
           }
         }
       }
-      if (z.team !== 'player' && tick && p.alive && dist(z.x, z.y, p.x, p.y) < z.r + p.r * 0.4) {
+      if (z.team !== 'player' && tick && z.dmg > 0 && p.alive && dist(z.x, z.y, p.x, p.y) < z.r + p.r * 0.4) {
         this.hurtPlayer(z.dmg, z.x, z.y, undefined, false, true);
       }
     }
@@ -650,6 +716,18 @@ export class RunScene extends Phaser.Scene {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       if (e instanceof Boss) e.drawExtras(g);
+      if (e.def.behavior === 'knight' && e.guardDown <= 0 && e.state !== 'charge') {
+        g.lineStyle(3, 0xc87cff, 0.75);
+        g.beginPath();
+        g.arc(e.x, e.y, e.r + 8, e.faceA - 1.0, e.faceA + 1.0);
+        g.strokePath();
+      }
+      if (e.ward > 0) {
+        g.lineStyle(3, 0x9fd8ff, 0.6 + Math.sin(e.animT * 12) * 0.3);
+        g.strokeCircle(e.x, e.y, e.r + 12);
+        g.lineStyle(1, 0xffffff, 0.8);
+        g.strokeCircle(e.x, e.y, e.r + 15);
+      }
       if (e.shielded > 0) {
         g.fillStyle(0x9feaff, 0.18);
         g.fillCircle(e.x, e.y, e.r + 10);
@@ -684,6 +762,157 @@ export class RunScene extends Phaser.Scene {
         g.fillRect(x, y, w * Math.max(0, e.hpShown), 3);
         g.fillStyle(e.elite || e.champion ? 0xffb52e : 0xff4a5a, 1);
         g.fillRect(x, y, w * Math.max(0, e.hp / e.maxHp), 3);
+      }
+    }
+  }
+
+  // ───────────────────────── Ascension systems ─────────────────────────
+  /** Endless Survival: escalating waves, boss every 5th, rewards between waves. */
+  arenaTick(dt: number) {
+    const run = this.run;
+    if (this.enemies.length || this.pendingSpawns || this.waveIdx < this.waves.length) return;
+    if (this.arenaBreak > 0) {
+      this.arenaBreak -= dt;
+      return;
+    }
+    if (run.wave > 0 && !this.waveRewarded) {
+      this.waveRewarded = true;
+      void this.arenaRewards();
+      return;
+    }
+    if (this.roomState !== 'fight') return;
+    run.wave++;
+    this.waveRewarded = false;
+    this.arenaBreak = 2.5;
+    UI.hud.setRoom(this);
+    if (run.wave % 5 === 0) {
+      const ids = ['thornmother', 'glacius', 'tyrant', 'king', 'arbiter'];
+      this.banner(`Wave ${run.wave}`, 'A guardian approaches');
+      this.pendingSpawns++;
+      this.delay(1, () => this.spawnBoss(ids[(run.wave / 5 - 1) % ids.length]));
+      return;
+    }
+    this.banner(`Wave ${run.wave}`);
+    const pool = ['slime', 'thornling', 'boar', 'spore', 'wisp', 'guardian', 'caster', 'crawler', 'imp', 'brute', 'seer', 'totem', 'knight', 'stalker', 'chaplain', 'hound', 'weaver', 'mite', 'lurker', 'sentinel'];
+    const tierMax = Math.min(pool.length, 6 + run.wave * 2);
+    let budget = 5 + run.wave * 1.6;
+    const wave: string[] = [];
+    while (budget > 0.8 && wave.length < 14) {
+      const e = getEnemy(pick(pool.slice(0, tierMax)));
+      wave.push(e.id);
+      budget -= e.cost;
+    }
+    if (run.wave >= 4 && run.wave % 2 === 0) wave[0] = 'ELITE:' + wave[0];
+    this.waves.push(wave);
+    this.spawnWave();
+  }
+
+  waveRewarded = false;
+
+  async arenaRewards() {
+    const run = this.run;
+    if (run.wave % 5 === 0) {
+      run.shards += 2 + Math.floor(run.wave / 5);
+      UI.hud.toast(`Milestone! +${2 + Math.floor(run.wave / 5)} Rift Shards`, '#c8a0ff');
+      this.pendingLoot.push(run.rollItem(1, run.wave * 0.05));
+    }
+    for (const item of this.pendingLoot) {
+      await this.modal(() => UI.run.itemReveal(item, this));
+      if (this.stale(run)) return;
+    }
+    this.pendingLoot = [];
+    if (run.wave % 2 === 0) {
+      await this.modal(() => UI.run.chooseBlessing(this, run.wave % 5 === 0));
+      if (this.stale(run)) return;
+    }
+    if (run.wave % 6 === 0) {
+      await this.modal(() => UI.run.chooseMutation(this));
+      if (this.stale(run)) return;
+    }
+    run.roomsCleared = run.wave;
+    this.checkpoint();
+  }
+
+  /** Environmental hazards: unstable floors (Citadel) and drifting gravity wells (Crucible). */
+  hazardTick(dt: number) {
+    const hz = this.biome.hazard;
+    if (!hz || this.roomType === 'shrine' || this.roomType === 'merchant' || this.roomType === 'treasure' || this.roomType === 'event') return;
+    this.hazardT -= dt;
+    if (this.hazardT > 0) return;
+    const p = this.player;
+    if (hz === 'cracks') {
+      this.hazardT = rand(5.5, 7.5);
+      for (let i = 0; i < 3; i++) {
+        const spot = i === 0 ? { x: p.x + rand(-30, 30), y: p.y + rand(-30, 30) } : this.findOpenSpot(0, p.x, p.y);
+        this.addTelegraph(new Telegraph({ kind: 'circle', x: spot.x, y: spot.y, r: 34 }, 1.1, 0xa25cff, () => {
+          this.fx.pillar(spot.x, spot.y, 0xc87cff);
+          this.fx.burst(spot.x, spot.y, 0xa25cff, 10, 120);
+          this.aoeEnemy(spot.x, spot.y, 34, 10 + this.run.act * 4);
+          for (const e of this.enemiesNear(spot.x, spot.y, 34)) if (!e.isBoss) this.combat.hit(e, e.maxHp * 0.25, { source: 'proc', color: 0xc87cff });
+        }));
+      }
+    } else {
+      this.hazardT = rand(9, 12);
+      const spot = this.findOpenSpot(140, p.x, p.y);
+      const a = Math.random() * Math.PI * 2;
+      this.addZone({ x: spot.x, y: spot.y, r: 95, kind: 'gravity', team: 'both', dmg: 0, tick: 1, life: 8, vx: Math.cos(a) * 22, vy: Math.sin(a) * 22 });
+    }
+  }
+
+  /** Perfect dodge: you rolled through an attack. Slow-mo, counter-charge and dodge refund. */
+  perfectDodge(sx: number, sy: number) {
+    const p = this.player;
+    const run = this.run;
+    if (this.perfectCd > 0) return;
+    this.perfectCd = 0.6;
+    run.perfects++;
+    track('perfect');
+    p.counterT = 2.5;
+    p.dodgeCd *= run.power('syn_riftdancer') ? 0 : 0.5;
+    this.fx.floatText(p.x, p.y - 30, 'PERFECT!', '#9fe8ff', 14);
+    this.fx.ring(p.x, p.y, 40, 0x9fe8ff, 0.4, 4);
+    this.sfx('shield');
+    if (App.save.settings.flashes) this.cameras.main.flash(80, 160, 220, 255, false);
+    const temporal = run.power('temporal');
+    this.slowMo = temporal ? 0.45 : 0.6;
+    this.time.delayedCall(temporal ? 1500 : 300, () => {
+      if (this.roomState !== 'dead') this.slowMo = 1;
+    });
+    if (run.power('pdFreeze')) for (const e of this.enemiesNear(p.x, p.y, 100)) e.st.frozen = Math.max(e.st.frozen, e.isBoss ? 0.5 : 1.5);
+    if (run.power('pdDecoy')) this.spawnDecoy(p.x, p.y);
+    if (p.spec === 'sw_duel') p.specialCd -= run.stats.abilityCooldown * 0.3;
+    void sx;
+    void sy;
+  }
+
+  /** Orrery Pendant orbiting stars and Astral Carapace gravity pulse. */
+  orbitTick(dt: number) {
+    const run = this.run;
+    const p = this.player;
+    if (!p) return;
+    const want = run.power('orbitStars') ? 3 : 0;
+    while (this.orbit.length < want) this.orbit.push(this.add.image(p.x, p.y, 'p_star').setScale(2).setDepth(1500).setBlendMode(Phaser.BlendModes.ADD));
+    this.perfectCd -= dt;
+    this.orbit.forEach((img, i) => {
+      const a = run.elapsed * 3 + (i / 3) * Math.PI * 2;
+      img.setPosition(p.x + Math.cos(a) * 46, p.y + Math.sin(a) * 46).setRotation(a * 2);
+      for (const e of this.enemiesNear(img.x, img.y, 8)) {
+        const last = this.orbitHit.get(e) ?? -9;
+        if (run.elapsed - last > 0.5) {
+          this.orbitHit.set(e, run.elapsed);
+          this.combat.hit(e, run.stats.damage * 0.45, { source: 'proc', color: 0xfff3c4, silent: true });
+        }
+      }
+    });
+    if (run.power('gravPulse') && this.roomState === 'fight') {
+      this.pulseT -= dt;
+      if (this.pulseT <= 0) {
+        this.pulseT = 6;
+        this.fx.ring(p.x, p.y, 130, 0x9fd8ff, 0.5, 6);
+        for (const e of this.enemiesNear(p.x, p.y, 130)) {
+          e.takeKnockback(angleTo(e.x, e.y, p.x, p.y), 260);
+          this.combat.hit(e, run.stats.damage * 0.9, { source: 'proc', color: 0x9fd8ff });
+        }
       }
     }
   }
@@ -867,6 +1096,7 @@ export class RunScene extends Phaser.Scene {
     const p = this.player;
     const run = this.run;
     if (!p.alive || this.roomState === 'dead' || this.roomState === 'leaving' || this.roomState === 'menu') return false;
+    if (p.dodging && !isZone) this.perfectDodge(sx, sy);
     if (!ignoreInvuln && (p.invuln > 0 || p.dodging)) return false;
     if (isZone && p.dodging) return false;
     if (run.power('evasion') && chance(0.1)) {
@@ -877,7 +1107,10 @@ export class RunScene extends Phaser.Scene {
     if (p.absorbHit()) return false;
     let dmg = amount * run.stats.damageTaken * (1 - run.stats.armor / (run.stats.armor + 100));
     if (p.unbreakT > 0) dmg *= 0.75;
-    if (p.bulwarkT > 0) dmg *= 0.4;
+    if (p.bulwarkT > 0) {
+      if (p.spec === 'gd_jugg' && src && src.alive) this.combat.hit(src, dmg * 0.6 * 1.5, { source: 'proc', color: 0xffcf5a, kb: 180 });
+      dmg *= 0.4;
+    }
     if (p.cls === 'guardian' || run.power('unbreakable')) p.unbreakT = 3;
     if (src && src.st.radiance > 0) dmg *= 0.75;
     dmg = Math.max(1, Math.round(dmg));
@@ -934,6 +1167,12 @@ export class RunScene extends Phaser.Scene {
     if (!e.isBoss) this.dropCoins(e.x, e.y, gold);
     const healChance = 0.05 + (run.power('midas') ? 0.06 : 0);
     if (!e.isBoss && chance(healChance)) this.dropPickup('heal', e.x, e.y, 1);
+    track('kills');
+    if (e.elite || e.champion) {
+      run.elitesKilled++;
+      track('elites');
+    }
+    if (run.power('bloomKills') && !e.isBoss && chance(0.2)) this.dropPickup('heal', e.x, e.y, 1);
     if (e.elite) {
       this.pendingLoot.push(run.rollItem(1, 0.6));
       this.dropPickup('shard', e.x, e.y, 1);
@@ -992,6 +1231,8 @@ export class RunScene extends Phaser.Scene {
   }
 
   registerReaction(id: string) {
+    this.run.reactionsTriggered++;
+    track('reactions');
     const c = App.save.codex;
     if (!c.reactions.includes(id)) {
       c.reactions.push(id);
@@ -1020,7 +1261,8 @@ export class RunScene extends Phaser.Scene {
     this.boss = null;
     run.bossesSlain.push(b.id);
     App.save.codex.bosses[b.id] = (App.save.codex.bosses[b.id] ?? 0) + 1;
-    const loreId = b.id === 'thornmother' ? 'l_hollow' : b.id === 'glacius' ? 'l_glacius' : 'l_tyrant';
+    track('bosses');
+    const loreId = ({ thornmother: 'l_hollow', glacius: 'l_glacius', tyrant: 'l_tyrant', king: 'l_king', arbiter: 'l_arbiter' } as Record<string, string>)[b.id];
     if (!App.save.codex.lore.includes(loreId)) App.save.codex.lore.push(loreId);
     UI.hud.setBoss(null);
     this.slowMo = 0.25;
@@ -1037,7 +1279,12 @@ export class RunScene extends Phaser.Scene {
     this.dropCoins(b.x, b.y, 60 * (run.act + 1) * run.stats.goldFind);
     const shardN = [4, 6, 10][run.act] ?? 6;
     for (let i = 0; i < shardN; i++) this.dropPickup('shard', b.x, b.y, 1);
-    this.pendingLoot.push(run.rollItem(run.act === 2 ? 3 : 2, 1));
+    // boss-exclusive relics: 40% (100% in Boss Rush finale is granted at the end)
+    if (chance(run.mode === 'bossrush' ? 0.5 : 0.4)) {
+      const ex = EXCLUSIVES_OF(b.id);
+      if (ex.length) this.pendingLoot.push(generateItem({ rarity: 3, base: pick(ex) }));
+      else this.pendingLoot.push(run.rollItem(run.act >= 2 ? 3 : 2, 1));
+    } else this.pendingLoot.push(run.rollItem(run.act >= 2 ? 3 : 2, 1));
   }
 
   banner(title: string, sub = '') {
@@ -1057,6 +1304,7 @@ export class RunScene extends Phaser.Scene {
     if (run.roomsCleared % 3 === 0) run.mutationPending = true;
     this.sfx('door');
     UI.hud.toast(t === 'boss' ? 'Boss defeated!' : 'Room cleared', '#9fd8ff');
+    track('rooms');
     // second wind / gilded shard
     const sw = run.power('secondWind');
     if (sw) {
@@ -1133,8 +1381,8 @@ export class RunScene extends Phaser.Scene {
     const node = run.node;
     const targets: { id: number; type: RoomType; label: string }[] = [];
     if (this.roomType === 'boss') {
-      if (run.act < 2) targets.push({ id: -1, type: 'boss', label: `Descend to Act ${['I', 'II', 'III'][run.act + 1]}` });
-      else targets.push({ id: -2, type: 'boss', label: 'Seal the Rift' });
+      if (run.act < run.endAct) targets.push({ id: -1, type: 'boss', label: run.mode === 'bossrush' ? `Next: ${getBoss(BIOMES[run.act + 1].boss).name}` : `Descend to Act ${ROMAN[run.act + 1]}` });
+      else targets.push({ id: -2, type: 'boss', label: run.mode === 'story' || run.mode === 'ascended' ? 'Seal the Rift' : 'Claim Victory' });
     } else {
       for (const nid of node.next) {
         const n = run.map.nodes[nid];

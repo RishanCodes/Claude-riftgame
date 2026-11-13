@@ -52,6 +52,32 @@ export const BOSSES: BossDef[] = [
     tip: 'It teleports, sweeps beams and calls meteors. At low health the rift itself collapses — stay inside the ring.',
     reward: 'Guaranteed Legendary+ item and a large Rift Shard cache.',
   },
+  {
+    id: 'king',
+    name: 'The Shattered King',
+    title: 'Last Lord of the Citadel',
+    biome: 3,
+    hp: 3600,
+    dmg: 22,
+    radius: 30,
+    phases: [0.66, 0.33],
+    desc: 'The Citadel\u2019s king tried to rule the rift. It shattered him into a hundred reflections, and every one of them still believes it wears the crown.',
+    tip: 'Phase 2 splits him into mirror images — the real one casts a shadow. Phase 3 slams the throne: find the gap in each shockwave ring.',
+    reward: 'Chance at Shattered King relics.',
+  },
+  {
+    id: 'arbiter',
+    name: 'The Astral Arbiter',
+    title: 'Judge of All Rifts',
+    biome: 4,
+    hp: 4000,
+    dmg: 24,
+    radius: 32,
+    phases: [0.6, 0.25],
+    desc: 'The intelligence behind the Fracture. It does not hate the world; it simply judged it, and found it unnecessary.',
+    tip: 'Constellation beams connect glowing stars — stay off the lines. When it collapses gravity, dash outward. In Judgment, one quadrant at a time is safe.',
+    reward: 'Chance at Astral relics.',
+  },
 ];
 
 export const getBoss = (id: string): BossDef => BOSSES.find((b) => b.id === id) ?? BOSSES[0];

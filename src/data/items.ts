@@ -23,6 +23,7 @@ export interface BaseDef {
   powers?: string[];
   grant?: import('../core/types').Element;
   desc?: string;
+  exclusive?: string;
 }
 
 export const BASES: BaseDef[] = [
@@ -110,9 +111,17 @@ export const POWERS: PowerDef[] = [
   { id: 'executioner', name: 'Executioner', slot: 'ring', desc: '+30% damage to enemies below 35% HP.' },
   { id: 'riposte', name: 'Riposte', slot: 'ring', desc: 'After dodging, your next strike is a guaranteed crit.' },
   { id: 'thorns', name: 'Briar', slot: 'ring', desc: 'Attackers take 80% of your damage.' },
+  { id: 'bloomKills', name: 'Heartseed', slot: 'amulet', desc: 'Kills have a 20% chance to sprout a healing blossom.' },
+  { id: 'frostOath', name: 'Frost Oath', slot: 'armor', desc: 'Frozen and chilled enemies take 40% more damage from you.' },
+  { id: 'pdFreeze', name: 'Frozen Vow', slot: 'ring', desc: 'Perfect dodges freeze nearby enemies for 1.5s.' },
+  { id: 'heraldEye', name: 'Herald\u2019s Gaze', slot: 'amulet', desc: 'Every 10s your next special deals double damage.' },
+  { id: 'mirrorFinisher', name: 'Mirror Crown', slot: 'helmet', desc: 'Finishers are repeated by a mirror image at 60% damage.' },
+  { id: 'pdDecoy', name: 'Mirror Step', slot: 'ring', desc: 'Perfect dodges leave an exploding decoy.' },
+  { id: 'gravPulse', name: 'Gravity Pulse', slot: 'armor', desc: 'Every 6s a gravity pulse pulls in and damages nearby enemies.' },
+  { id: 'orbitStars', name: 'Orrery', slot: 'amulet', desc: 'Three stars orbit you and damage enemies they touch.' },
 ];
 // powers only granted by specific items, never rolled randomly onto legacy gear
-const FIXED_ONLY = new Set(['evasion', 'dodgeCharge', 'comboCharm', 'unbreakable', 'companion', 'cdOnKill', 'killHaste', 'executioner', 'riposte', 'thorns']);
+const FIXED_ONLY = new Set(['bloomKills', 'frostOath', 'pdFreeze', 'heraldEye', 'mirrorFinisher', 'pdDecoy', 'gravPulse', 'orbitStars', 'evasion', 'dodgeCharge', 'comboCharm', 'unbreakable', 'companion', 'cdOnKill', 'killHaste', 'executioner', 'riposte', 'thorns']);
 
 export const getPower = (id: string): PowerDef | undefined => POWERS.find((p) => p.id === id);
 
@@ -138,8 +147,8 @@ export function generateItem(opts: { rarity: Rarity; tier?: number; slot?: Slot;
     // weapons: 75% for the current class, otherwise any class (so all weapons stay obtainable)
     const wantCls = slot === 'weapon' && opts.cls && chance(0.75) ? opts.cls : null;
     const fits = (b: BaseDef) => b.slot === slot && (!wantCls || b.cls === wantCls) && (b.rarity === undefined ? b.tier <= tier : b.rarity === opts.rarity);
-    let pool = BASES.filter(fits);
-    if (!pool.length) pool = BASES.filter((b) => b.slot === slot && (!wantCls || b.cls === wantCls));
+    let pool = BASES.filter((b) => fits(b) && !b.exclusive);
+    if (!pool.length) pool = BASES.filter((b) => b.slot === slot && !b.exclusive && (!wantCls || b.cls === wantCls));
     // items you already own are 3x as likely, so duplicates for star ranks keep coming
     base = weighted(pool.length ? pool : BASES, (b) => (opts.owned?.has(b.id) ? 3 : 1));
   }

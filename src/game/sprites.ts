@@ -750,3 +750,110 @@ for (let f = 0; f < 2; f++) {
     return pc.outline('#101818');
   });
 }
+
+// ───────────────────────── Ascension: Act IV & V enemies, bosses, props ─────────────────────────
+for (let f = 0; f < 2; f++) {
+  def('e_knight_' + f, () => {
+    const pc = new PixelCanvas(24, 26);
+    const l = f ? 1 : 0;
+    pc.rect(8, 19, 3, 6 - l, '#3a3450'); pc.rect(13, 19 + l, 3, 6 - l, '#3a3450');
+    pc.rect(6, 9, 12, 11, '#5a5470'); pc.rect(6, 9, 12, 2, '#8a82a8'); pc.rect(16, 9, 2, 11, '#3a3450');
+    pc.rect(8, 2, 8, 8, '#8a82a8'); pc.rect(8, 2, 8, 2, '#c8c0e0'); pc.rect(9, 5, 6, 2, '#100a1a');
+    pc.px(10, 5, '#c87cff'); pc.px(13, 5, '#c87cff'); pc.line(12, 0, 12, 2, '#a25cff');
+    // tower shield (facing right)
+    pc.rect(17, 6, 6, 16, '#4a3a6a'); pc.rect(17, 6, 6, 2, '#8a7ab0'); pc.rect(22, 6, 1, 16, '#2a1a40');
+    pc.line(19, 9, 21, 18, '#ffcf5a'); pc.line(21, 9, 19, 18, '#ffcf5a');
+    pc.line(4, 10 - f, 1, 20, '#c8d0e0');
+    return pc.outline('#08060c');
+  });
+  def('e_stalker_' + f, () => {
+    const pc = new PixelCanvas(22, 16);
+    const o = f ? 1 : 0;
+    for (let i = 0; i < 2; i++) { pc.line(5 + i * 9, 10, 3 + i * 9 - o, 15, '#3a1a5a'); pc.line(8 + i * 9, 10, 10 + i * 9 + o, 15, '#3a1a5a'); }
+    pc.ball(11, 8, 9, 5, '#4a2a6a', '#7a4ab0', '#1a0a2a');
+    pc.ball(18, 6, 4, 3.5, '#5a3a8a', '#8a5ad8', '#1a0a2a');
+    pc.px(19, 5, '#ff5ac8'); pc.px(21, 5, '#ff5ac8');
+    pc.line(2, 6, 0, 3 + o, '#a25cff'); pc.line(6, 4, 5, 1, '#a25cff');
+    return pc.outline('#0a0412');
+  });
+  def('e_chaplain_' + f, () => {
+    const pc = new PixelCanvas(18, 24);
+    for (let y = 9; y < 23; y++) { const h = 3 + Math.floor((y - 9) * 0.4); pc.rect(9 - h, y, h * 2, 1, '#e8e0c8'); pc.px(9 - h, y, '#a89870'); }
+    pc.rect(8, 10, 2, 13, '#ffcf5a');
+    pc.ball(9, 6, 4.5, 4.5, '#d8d0b8', '#ffffff', '#8a8070'); pc.ellipse(9, 7, 2.5, 2.5, '#1a1408');
+    pc.px(8, 7, '#ffe9a0'); pc.px(10, 7, '#ffe9a0');
+    const hy = f ? 0 : 1; pc.ellipse(9, hy + 1, 5, 1.2, '#ffe9a0');
+    pc.line(16, 4, 16, 22, '#c8a060'); pc.ball(16, 3, 2, 2, '#fff3c4', '#ffffff', '#ffcf5a');
+    return pc.outline('#120c06');
+  });
+  def('e_hound_' + f, () => {
+    const pc = new PixelCanvas(22, 14);
+    const l = f ? 1 : 0;
+    pc.rect(4 + l, 10, 2, 4, '#1a0a2a'); pc.rect(9 - l, 10, 2, 4, '#1a0a2a'); pc.rect(13 + l, 10, 2, 4, '#1a0a2a'); pc.rect(17 - l, 10, 2, 4, '#1a0a2a');
+    pc.ball(11, 7, 8, 4, '#2a1a40', '#4a2a6a', '#100618');
+    pc.ball(19, 5, 3.5, 3, '#2a1a40', '#4a2a6a', '#100618');
+    pc.px(21, 6, '#e0d8ff'); pc.px(20, 4, '#ff3a8a'); pc.line(17, 2, 18, 0, '#4a2a6a');
+    pc.line(3, 5, 0, 2 + l, '#a25cff'); pc.px(6, 3, '#a25cff'); pc.px(10, 2, '#a25cff');
+    return pc.outline('#06020c');
+  });
+  def('e_weaver_' + f, () => {
+    const pc = new PixelCanvas(22, 22);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + f * 0.3; pc.line(11, 11, 11 + Math.cos(a) * 10, 11 + Math.sin(a) * 9, '#7ab0ff'); pc.px(11 + Math.cos(a) * 10, 11 + Math.sin(a) * 9, '#ffffff'); }
+    pc.ball(11, 11, 5, 5, '#c8e0ff', '#ffffff', '#5a7ac8', '#ffffff');
+    pc.ellipse(11, 11, 2, 2.5, '#ffcf5a'); pc.px(11, 11, '#1a1408');
+    return pc.outline('#06102a');
+  });
+  def('e_mite_' + f, () => {
+    const pc = new PixelCanvas(14, 14);
+    pc.ball(7, 7, 5 + f * 0.5, 5 + f * 0.5, '#3a1a5a', '#7a4ab0', '#120620', f ? '#ff5ac8' : undefined);
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; pc.px(7 + Math.cos(a) * 7, 7 + Math.sin(a) * 7, '#c87cff'); }
+    pc.px(5, 6, '#ff5ac8'); pc.px(9, 6, '#ff5ac8');
+    return pc.outline('#06020c');
+  });
+  def('e_lurker_' + f, () => {
+    const pc = new PixelCanvas(24, 24);
+    for (let t = 0; t < Math.PI * 2; t += 0.12) pc.px(12 + Math.cos(t + f) * 11, 12 + Math.sin(t + f) * 4, '#5a7ac8');
+    pc.ball(12, 12, 8, 8, '#1c2442', '#3a4a8a', '#080a16');
+    pc.ellipse(12, 12, 4, 4, '#05060c'); pc.circle(12, 12, 2, '#9fd8ff');
+    pc.px(9, 8, '#ffffff');
+    return pc.outline('#020308');
+  });
+  def('e_sentinel_' + f, () => {
+    const pc = new PixelCanvas(24, 28);
+    pc.rect(7, 20, 4, 7, '#3a4a8a'); pc.rect(13, 20, 4, 7, '#3a4a8a');
+    pc.rect(5, 8, 14, 13, '#5a7ac8'); pc.rect(5, 8, 14, 2, '#c8e0ff'); pc.rect(17, 8, 2, 13, '#2a3a6a');
+    pc.ball(12, 14, 3, 3, '#ffe04a', '#ffffff', '#c09a20');
+    pc.rect(8, 1, 8, 7, '#7ab0ff'); pc.rect(8, 1, 8, 2, '#ffffff'); pc.rect(9, 4, 6, 2, '#06102a'); pc.rect(10, 4, 4, 1, '#ffe04a');
+    pc.ball(2, 12 - f, 3, 4, '#c8e0ff', '#ffffff', '#5a7ac8'); pc.ball(22, 12 + f, 3, 4, '#c8e0ff', '#ffffff', '#5a7ac8');
+    return pc.outline('#020614');
+  });
+  def('b_king_' + f, () => {
+    const pc = new PixelCanvas(40, 44);
+    pc.rect(9, 16, 22, 22, '#3a2a5a'); pc.rect(9, 16, 3, 22, '#5a4a8a');
+    for (let x = 9; x < 31; x += 4) pc.px(x + f, 38, '#3a2a5a');
+    pc.rect(13, 32, 5, 10, '#5a5470'); pc.rect(22, 32, 5, 10, '#5a5470');
+    pc.rect(12, 15, 16, 18, '#8a82a8'); pc.rect(12, 15, 16, 3, '#c8c0e0'); pc.rect(25, 15, 3, 18, '#4a4466');
+    pc.line(13, 20, 27, 30, '#a25cff'); pc.line(27, 20, 13, 30, '#a25cff');
+    pc.ball(9, 16, 5, 4, '#c8c0e0', '#ffffff', '#5a5470'); pc.ball(31, 16, 5, 4, '#c8c0e0', '#ffffff', '#5a5470');
+    pc.rect(15, 5, 10, 10, '#c8c0e0'); pc.rect(16, 9, 8, 2, '#100a1a'); pc.rect(17, 9, 2, 1, f ? '#ff5ac8' : '#c87cff'); pc.rect(21, 9, 2, 1, f ? '#ff5ac8' : '#c87cff');
+    for (let i = 0; i < 5; i++) pc.line(15 + i * 2.5, 5, 15 + i * 2.5, 1 + (i % 2) * 2, '#ffcf5a');
+    pc.rect(15, 4, 10, 1, '#ffcf5a');
+    // cracked mirror shards
+    pc.line(34, 4, 37, 34, '#e0d8ff'); pc.line(35, 4, 38, 34, '#ffffff'); pc.rect(33, 32, 6, 2, '#ffcf5a');
+    pc.px(5, 24, '#e0d8ff'); pc.px(3, 30, '#c8c0e0'); pc.px(36, 40, '#e0d8ff');
+    return pc.outline('#06020c');
+  });
+  def('b_arbiter_' + f, () => {
+    const pc = new PixelCanvas(48, 48);
+    for (let i = 0; i < 3; i++) for (let t = 0; t < Math.PI * 2; t += 0.05) pc.px(24 + Math.cos(t) * (14 + i * 4), 24 + Math.sin(t + f * 0.2) * (5 + i * 2), i === 1 ? '#ffcf5a' : '#7ab0ff');
+    pc.ball(24, 24, 11, 12, '#1c2442', '#3a5ab8', '#080a16');
+    pc.ellipse(24, 24, 6, 7, '#fff3c4'); pc.ellipse(24, 24, 3, 6, f ? '#ffcf5a' : '#9fd8ff'); pc.rect(23, 20, 2, 8, '#080a16');
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; pc.line(24 + Math.cos(a) * 13, 24 + Math.sin(a) * 13, 24 + Math.cos(a) * 20, 24 + Math.sin(a) * 20, '#c8e0ff'); pc.px(24 + Math.cos(a) * 21, 24 + Math.sin(a) * 21, '#ffffff'); }
+    pc.px(21, 20, '#ffffff');
+    return pc.outline('#020308');
+  });
+}
+obstacle('ob_ruin_s', 18, 18, '#5a5470', '#8a82a8', '#2a2440', undefined, true);
+obstacle('ob_ruin_l', 30, 26, '#5a5470', '#8a82a8', '#2a2440', undefined, true);
+obstacle('ob_star_s', 18, 14, '#2a3a6a', '#5a7ac8', '#101830', '#9fd8ff');
+obstacle('ob_star_l', 30, 22, '#2a3a6a', '#5a7ac8', '#101830', '#ffcf5a');

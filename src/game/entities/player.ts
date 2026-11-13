@@ -8,6 +8,8 @@ import { ELEMENTS, ELEMENT_LIST } from '../../data/elements';
 import { App } from '../../app';
 import { getBase, weaponProps } from '../../data/items';
 import type { WeaponProps } from '../../data/gear';
+import { getSpec, masteryLevel, SPEC_LEVEL } from '../../data/modes';
+import { track } from '../objectives';
 import { equippedItems } from '../stats';
 import { iconCanvasKey } from '../textures';
 import type { Item } from '../../core/types';
@@ -89,6 +91,13 @@ export class Player {
   stepDir = 0;
   aimT = 0;
   critHealT = 0;
+  counterT = 0; // perfect-dodge counterattack window
+  chain = 0; // basic-attack combo toward a finisher
+  chainT = 0;
+  momentumT = 0;
+  specials = 0;
+  heraldT = 10;
+  spec = '';
   lastStepGuard = -10;
   stepRefunded = false;
   aimA = 0;
@@ -108,7 +117,8 @@ export class Player {
     this.shieldGfx = scene.add.image(x, y, 'fx_ring').setScale(1.4).setTint(0x9fd8ff).setAlpha(0).setDepth(1400).setBlendMode(Phaser.BlendModes.ADD);
     this.attack = ATTACKS[this.cls] ?? ATTACKS.swordsman;
     this.special = SPECIALS[this.cls] ?? SPECIALS.swordsman;
-    this.wp = weaponProps(this.weapon);
+    this.spec = masteryLevel(App.save.mastery[this.cls] ?? 0).level >= SPEC_LEVEL ? App.save.spec[this.cls] ?? '' : '';
+    this.wp = this.mergedProps(this.weapon);
     this.aegisUp = this.run.power('aegis') > 0 || this.run.power('bulwark') > 0;
   }
 
@@ -150,7 +160,20 @@ export class Player {
       this.weapon = w;
       this.sword.setTexture(iconCanvasKey(this.scene, w ? getBase(w.base).icon : 'i_sword1'));
     }
-    this.wp = weaponProps(w);
+    this.wp = this.mergedProps(w);
+  }
+
+  /** Weapon behavior plus the hero's chosen specialization. */
+  mergedProps(w?: Item): WeaponProps {
+    const p = weaponProps(w);
+    const sp = getSpec(this.spec);
+    if (sp && sp.cls === this.cls && sp.props) {
+      for (const [k, v] of Object.entries(sp.props) as [keyof WeaponProps, unknown][]) {
+        const cur = p[k];
+        (p as Record<string, unknown>)[k] = typeof v === 'number' && typeof cur === 'number' ? cur + v : v;
+      }
+    }
+    return p;
   }
 
   /** Apply a hit carrying the equipped weapon's on-hit properties. */
@@ -159,14 +182,22 @@ export class Player {
     const wp = this.wp;
     if (!e.alive) return;
     let d = dmg * this.damageMult(e);
-    const forceCrit = this.riposte > 0 && o.source === 'attack';
+    let forceCrit = this.riposte > 0 && o.source === 'attack';
+    if (this.counterT > 0 && (o.source === 'attack' || o.source === 'ability')) {
+      // counterattack after a perfect dodge: guaranteed crit, double damage, staggers
+      d *= 2;
+      forceCrit = true;
+      this.counterT = 0;
+      this.scene.fx.floatText(e.x, e.y - e.r - 18, 'COUNTER', '#9fe8ff', 12);
+      if (!e.isBoss) e.stagger(0.6);
+    }
     if (this.ambush) {
       d *= 1.6;
       this.ambush = false;
     }
     const kb = (o.kb ?? 0) * (wp.knock ?? 1);
     s.combat.hit(e, d, { source: o.source, canCrit: true, forceCrit, element: o.el, kb, kbAngle: o.angle ?? angleTo(this.x, this.y, e.x, e.y) });
-    if (forceCrit) this.riposte--;
+    if (forceCrit && this.riposte > 0) this.riposte--;
     if (this.run.power('comboCharm')) {
       this.combo = Math.min(10, this.combo + 1);
       this.comboT = 1.2;
@@ -332,6 +363,11 @@ export class Player {
     this.windwalkT -= dt;
     this.unbreakT -= dt;
     this.critHealT -= dt;
+    this.counterT -= dt;
+    this.momentumT -= dt;
+    this.heraldT -= dt;
+    this.chainT -= dt;
+    if (this.chainT <= 0) this.chain = 0;
     this.bulwarkT -= dt;
     this.hasteT -= dt;
     this.comboT -= dt;
@@ -392,6 +428,7 @@ export class Player {
       if (this.slowT > 0) sp *= 0.65;
       if (this.windwalkT > 0) sp *= 1.4;
       if (this.hasteT > 0) sp *= 1.25;
+      if (this.momentumT > 0) sp *= 1.25;
       if (this.bulwarkT > 0) sp *= 0.8;
       if (this.specialT > 0) sp *= 0.75;
       this.vx = mx * sp;
@@ -429,6 +466,7 @@ export class Player {
     s.fx.burst(this.x, this.y + 8, 0xc8d8ff, 6, 60);
     if (this.run.power('phantom')) s.spawnDecoy(this.x, this.y);
     if (this.run.power('dodgeCharge')) this.ambush = true;
+    if (this.run.power('phaseMomentum')) this.momentumT = 2;
     s.tutorialEvent('dodged');
   }
 
@@ -450,7 +488,23 @@ export class Player {
   trySpecial() {
     if (this.specialCd > 0 || this.specialT > 0) return;
     this.specialCd = this.stats.abilityCooldown;
-    this.special.cast(this, 1);
+    let pow = 1;
+    if (this.run.power('heraldEye') && this.heraldT <= 0) {
+      pow = 2;
+      this.heraldT = 10;
+      this.scene.fx.floatText(this.x, this.y - 30, "Herald's Gaze", '#ffb04a', 12);
+    }
+    this.special.cast(this, pow);
+    this.specials++;
+    if (this.run.power('voidResonance') && this.specials % 3 === 0) {
+      const blasts = this.run.power('syn_resonantecho') ? 2 : 1;
+      for (let i = 0; i < blasts; i++)
+        this.scene.delay(0.3 + i * 0.4, () => {
+          const s = this.scene;
+          s.fx.explosion(this.x, this.y, 110, 0xa25cff);
+          for (const e of s.enemiesNear(this.x, this.y, 110)) this.strike(e, this.stats.damage * 4 * this.stats.abilityDamage, { source: 'ability', el: 'shadow', kb: 200, noProcs: true });
+        });
+    }
     this.scene.tutorialEvent('special');
     // echoes
     const echoes: number[] = [];
@@ -486,6 +540,8 @@ export class Player {
     if (target && exe && target.hp / target.maxHp < 0.35) m *= 1 + exe;
     if (this.cls === 'archer' && target && target === this.eagleTarget) m *= 1 + this.eagle * 0.08;
     if (this.combo) m *= 1 + this.combo * 0.02;
+    if (this.momentumT > 0) m *= 1.3;
+    if (target && run.power('frostOath') && (target.st.frozen > 0 || target.st.chill > 0)) m *= 1.4;
     if (run.power('warlord')) {
       const n = this.scene.enemiesNear(this.x, this.y, this.stats.range + 30).length;
       m *= 1 + Math.min(0.3, n * 0.06);
@@ -580,7 +636,15 @@ function kit(fire: Fire, melee: boolean): AttackImpl {
       p.aimT = 0.4;
       p.facing = a;
       p.flip = Math.cos(a) < 0;
-      fire(p, target, a, 1, false);
+      // combo: every 4th basic attack within 1.6s of the last is a finisher
+      p.chain++;
+      p.chainT = 1.6;
+      const fin = p.chain >= 4;
+      if (fin) {
+        p.chain = 0;
+        finisher(p, target, a, fire);
+      } else fire(p, target, a, 1, false);
+      if (p.run.power('echoStrike')) s.delay(0.4, () => p.alive && target.alive && fire(p, target, a, 0.5, true));
       const ex = (p.wp.extraStrike ?? 0) + 0.25 * p.run.power('twinStrike');
       if (ex && chance(Math.min(0.75, ex))) s.delay(0.12, () => p.alive && target.alive && fire(p, target, a, 0.8, true));
       const waveLvl = p.run.power('bladeWave');
@@ -589,6 +653,53 @@ function kit(fire: Fire, melee: boolean): AttackImpl {
       if (p.run.power('wavecutter') && p.swingCount % 3 === 0) s.playerWave(p.x, p.y, a, st.damage * 1.4, p.peekElement(), 1.8);
     },
   };
+}
+
+/** Class-flavoured combo finisher. Staggers normal enemies it hits. */
+function finisher(p: Player, t: Enemy, a: number, fire: Fire) {
+  const s = p.scene;
+  const run = p.run;
+  let mult = 1.8 * (p.spec === 'sw_duel' ? 1.8 : 1);
+  if (run.power('overcharge')) {
+    mult *= 2.5;
+    run.hp = Math.max(1, run.hp * 0.96);
+  }
+  run.finishers++;
+  track('finishers');
+  s.fx.floatText(p.x, p.y - 26, 'FINISHER', '#ffcf5a', 11);
+  s.hitStop(0.05);
+  const st = p.stats;
+  const doIt = (m: number) => {
+    switch (p.cls) {
+      case 'swordsman':
+        s.sfx('special', 0.6);
+        meleeArc(p, a, st.damage * m, st.range * 1.2, 360, 260, p.nextElement(), true, 0xffe08a);
+        break;
+      case 'assassin':
+        for (let i = 0; i < 3; i++) s.delay(i * 0.06, () => p.alive && meleeArc(p, a, st.damage * 0.55 * m, st.range * 1.15, 150, 90, p.nextElement(), false, 0xff9ad8));
+        break;
+      case 'mage':
+        for (let i = -1; i <= 1; i++) p.shoot(a + i * 0.25, st.damage * m * 0.7, 'p_magic', { speed: 320, el: p.nextElement(), splash: 50, scale: 1.4, tint: 0xffcf5a });
+        break;
+      case 'archer':
+        p.shoot(a, st.damage * m * 1.3, 'p_arrow', { speed: 700, pierce: 99, scale: 1.6, tint: 0xffcf5a, el: p.nextElement() });
+        break;
+      case 'guardian':
+        s.fx.ring(p.x, p.y, 100, 0xffcf5a, 0.4, 7);
+        s.fx.shake(0.12, 0.006);
+        for (const e of s.enemiesNear(p.x, p.y, 100)) {
+          p.strike(e, st.damage * m * 0.8, { source: 'attack', el: p.nextElement(), kb: 300 });
+          if (!e.isBoss) e.stagger(0.7);
+        }
+        break;
+      default:
+        for (const c of p.companions) c.cd = 0;
+        fire(p, t, a, m, false);
+    }
+    for (const e of s.enemiesNear(p.x + Math.cos(a) * 40, p.y + Math.sin(a) * 40, st.range + 20)) if (!e.isBoss) e.stagger(0.4);
+  };
+  doIt(mult);
+  if (run.power('mirrorFinisher')) s.delay(0.3, () => p.alive && doIt(mult * 0.6));
 }
 
 function meleeArc(p: Player, a: number, dmg: number, range: number, arcDeg: number, kb: number, el: Element | undefined, deflect: boolean, tint = 0xffffff) {
@@ -709,8 +820,9 @@ export const SPECIALS: Record<string, SpecialImpl> = {
     cast(p, power) {
       const s = p.scene;
       const st = p.stats;
-      const hits = 3 + (p.run.power('cyclone') ? 1 : 0);
-      const radius = 88 * areaScale(p);
+      const storm = p.spec === 'sw_storm';
+      const hits = 3 + (p.run.power('cyclone') ? 1 : 0) + (storm ? 2 : 0);
+      const radius = 88 * areaScale(p) * (storm ? 1.25 : 1);
       const dmg = st.damage * 1.3 * st.abilityDamage * power;
       if (power >= 1) p.specialT = 0.7;
       s.sfx('special');
@@ -776,6 +888,7 @@ export const SPECIALS: Record<string, SpecialImpl> = {
       const s = p.scene;
       const r = 105 * areaScale(p);
       const dmg = p.stats.damage * 2.2 * p.stats.abilityDamage * power;
+      if (p.spec === 'mg_arch') for (const e of s.enemiesNear(p.x, p.y, r * 1.6)) e.takeKnockback(angleTo(e.x, e.y, p.x, p.y), 380);
       s.sfx('boom');
       s.fx.explosion(p.x, p.y, r, 0xc8a0ff);
       s.fx.ring(p.x, p.y, r * 0.7, 0x5aa8ff, 0.5, 6);

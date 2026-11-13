@@ -6,11 +6,13 @@ import { itemAllMods, getBase, rankPowers, starsOf } from '../data/items';
 import { getBlessing } from '../data/blessings';
 import { getMutation, SYNERGIES } from '../data/mutations';
 import type { SaveData } from '../core/save';
+import { masteryLevel, masteryMods, getSpec, SPEC_LEVEL } from '../data/modes';
 
 export interface RunModsSource {
   blessings: Record<string, number>;
   mutations: Record<string, number>;
   extraMods: StatMod[];
+  modifiers?: string[];
 }
 
 export function equippedItems(save: SaveData): Partial<Record<Slot, Item>> {
@@ -33,10 +35,16 @@ export function collectMods(save: SaveData, run?: RunModsSource): { mods: StatMo
     const lvl = save.talents[t.id] ?? 0;
     if (lvl > 0 && t.mods) mods.push(...t.mods(lvl));
   }
+  const ml = masteryLevel(save.mastery[save.selectedClass] ?? 0).level;
+  mods.push(...masteryMods(ml));
+  const sp = getSpec(save.spec[save.selectedClass]);
+  if (sp && sp.cls === save.selectedClass && ml >= SPEC_LEVEL && sp.mods) mods.push(...sp.mods);
   const eq = equippedItems(save);
+  const humble = run?.modifiers?.includes('commonOnly');
   for (const s of SLOTS) {
     const it = eq[s];
     if (!it) continue;
+    if (humble && it.rarity > 0) continue;
     mods.push(...itemAllMods(it));
     for (const p of it.powers) addPower(p);
     for (const p of rankPowers(it.slot, starsOf(it))) addPower(p);

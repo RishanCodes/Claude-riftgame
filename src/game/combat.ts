@@ -39,12 +39,15 @@ export class Combat {
       dmg *= st.critDamage;
     }
     if (o.source !== 'reaction' && o.source !== 'dot' && !o.element && run.power('flux')) dmg *= 0.75;
-    dmg *= e.damageTakenMult();
+    // direction the hit comes from (projectiles/companions can flank shields)
+    e.hitFrom = o.kbAngle !== undefined ? o.kbAngle + Math.PI : angleTo(e.x, e.y, s.player.x, s.player.y);
+    const takenMult = e.damageTakenMult(true);
+    dmg *= takenMult;
     if (o.source === 'attack' && e.st.radiance > 0) {
       s.healPlayer(st.maxHp * 0.01, false, true);
     }
     dmg = Math.max(1, Math.round(dmg));
-    if (e.damageTakenMult() === 0) dmg = 0;
+    if (takenMult === 0) dmg = 0;
     e.hp -= dmg;
     e.flashT = o.source === 'dot' ? 0 : 0.07;
     if (dmg > 0) s.fx.damageNumber(e.x, e.y - e.r, dmg, crit, o.color ?? (o.element ? ELEMENTS[o.element].color : undefined), o.source === 'dot');

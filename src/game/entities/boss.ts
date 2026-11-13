@@ -34,7 +34,7 @@ export class Boss extends Enemy {
     const pseudo: EnemyDef = {
       id: bdef.id, name: bdef.name, biome: bdef.biome, behavior: 'chaser', role: 'Boss', hp: bdef.hp, dmg: bdef.dmg,
       speed: 60, radius: bdef.radius, cost: 0, gold: 0, kbResist: 1, desc: bdef.desc, tip: bdef.tip,
-      element: bdef.id === 'thornmother' ? 'earth' : bdef.id === 'glacius' ? 'ice' : undefined,
+      element: bdef.id === 'thornmother' ? 'earth' : bdef.id === 'glacius' ? 'ice' : bdef.id === 'king' ? 'shadow' : undefined,
     };
     super(scene, pseudo, x, y, mult);
     this.bdef = bdef;
@@ -113,7 +113,7 @@ export class Boss extends Enemy {
       const hx = this.scene.W / 2 + Math.sin(this.animT * 0.4) * 90;
       const hy = this.scene.bounds.y + 120 + Math.cos(this.animT * 0.3) * 30;
       this.moveToward(hx, hy, 0.4);
-    } else if (this.id === 'glacius') {
+    } else if (this.id === 'glacius' || this.id === 'king') {
       if (dist(this.x, this.y, t.x, t.y) > 120) this.moveToward(t.x, t.y, 0.9);
       else this.stop(0.1);
     } else {
@@ -131,6 +131,16 @@ export class Boss extends Enemy {
     }
     if (this.id === 'glacius') {
       return p === 0 ? ['dash', 'nova', 'hail', 'dash', 'nova'] : ['dash3', 'beams', 'hail', 'nova2', 'dash3', 'summonG'];
+    }
+    if (this.id === 'king') {
+      if (p === 0) return ['combo', 'shards', 'dash', 'combo', 'shards'];
+      if (p === 1) return ['mirror', 'combo', 'dash3', 'shards', 'combo'];
+      return ['throne', 'combo', 'shards', 'throne', 'dash3', 'mirror'];
+    }
+    if (this.id === 'arbiter') {
+      if (p === 0) return ['constellation', 'orbit', 'constellation', 'summonA'];
+      if (p === 1) return ['collapseG', 'constellation', 'orbit', 'summonA', 'constellation'];
+      return ['judgment', 'orbit', 'collapseG', 'judgment', 'constellation'];
     }
     // tyrant
     if (p === 0) return ['meteors', 'teleport', 'beam', 'burst', 'summonI'];
@@ -344,6 +354,146 @@ export class Boss extends Enemy {
         this.ringR = 400;
         s.banner('The rift collapses!', 'Stay inside the ring');
         rest(1.0);
+        break;
+      }
+      // ── The Shattered King ──
+      case 'combo': {
+        // three telegraphed cleaves that follow you
+        for (let i = 0; i < 3; i++) {
+          s.delay(i * 0.55, () => {
+            if (!this.alive) return;
+            const a = angleTo(this.x, this.y, this.target.x, this.target.y);
+            const cx = this.x + Math.cos(a) * 55;
+            const cy = this.y + Math.sin(a) * 55;
+            s.addTelegraph(new Telegraph({ kind: 'circle', x: cx, y: cy, r: 58 }, 0.5, 0xc87cff, () => {
+              s.aoeEnemy(cx, cy, 58, dmg * 1.1);
+              s.fx.slash(this.x, this.y, a, 110, i % 2 === 1, 0xc87cff);
+              s.sfx('slash');
+            }, this));
+          });
+        }
+        rest(2.0);
+        break;
+      }
+      case 'shards': {
+        const a = angleTo(this.x, this.y, t.x, t.y);
+        for (let i = -3; i <= 3; i++) s.enemyShot(this.x, this.y, a + i * 0.14, 190, dmg * 0.7, 'p_ice', 4, { tint: 0xe0d8ff });
+        s.delay(0.4, () => {
+          if (!this.alive) return;
+          const n = 14;
+          for (let i = 0; i < n; i++) s.enemyShot(this.x, this.y, (i / n) * Math.PI * 2 + 0.2, 130, dmg * 0.6, 'p_ice', 4, { tint: 0xc87cff });
+        });
+        s.sfx('shoot');
+        rest(1.5);
+        break;
+      }
+      case 'mirror': {
+        // split into reflections: decoys mimic the king and shoot; the real king casts a shadow
+        for (let i = 0; i < 2; i++) {
+          const p = s.findOpenSpot(120, t.x, t.y);
+          const m = s.spawnEnemy('knight', p.x, p.y);
+          m.name = 'Reflection';
+          m.maxHp = m.hp = Math.round(this.maxHp * 0.06);
+          m.sprite.setTexture('b_king_0').setScale(1.6).setAlpha(0.75).setTint(0xc8b0ff);
+          m.texKey = () => 'b_king_0';
+          m.shadow.setVisible(false);
+        }
+        s.fx.burst(this.x, this.y, 0xe0d8ff, 24, 160);
+        s.sfx('freeze');
+        rest(1.2);
+        break;
+      }
+      case 'throne': {
+        this.invulnerable = 0.6;
+        s.addTelegraph(new Telegraph({ kind: 'circle', x: this.x, y: this.y, r: 95 }, 0.9, 0xffcf5a, () => {
+          s.aoeEnemy(this.x, this.y, 95, dmg * 1.3);
+          s.fx.shake(0.3, 0.01);
+          s.fx.ring(this.x, this.y, 95, 0xffcf5a, 0.5, 8);
+          const gap = Math.random() * Math.PI * 2;
+          for (let w = 0; w < 3; w++)
+            s.delay(w * 0.45, () => {
+              const n = 26;
+              for (let i = 0; i < n; i++) {
+                const a2 = gap + w * 0.9 + (i / n) * Math.PI * 2;
+                if (Math.abs(Math.atan2(Math.sin(a2 - gap - w * 0.9), Math.cos(a2 - gap - w * 0.9))) < 0.4) continue;
+                s.enemyShot(this.x, this.y, a2, 150, dmg * 0.7, 'p_orb', 5, { tint: 0xffcf5a });
+              }
+            });
+        }, this));
+        rest(2.4);
+        break;
+      }
+      // ── The Astral Arbiter ──
+      case 'constellation': {
+        const b = s.bounds;
+        const pts = Array.from({ length: 4 }, (_, i) => (i === 1 ? { x: t.x, y: t.y } : { x: rand(b.x + 30, b.r - 30), y: rand(b.y + 60, b.b - 40) }));
+        for (const p of pts) s.fx.pillar(p.x, p.y, 0xffffff);
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i];
+          const c = pts[i + 1];
+          s.addTelegraph(new Telegraph({ kind: 'line', x1: a.x, y1: a.y, x2: c.x, y2: c.y, w: 18 }, 1.1 + i * 0.15, 0xfff3c4, () => {
+            const p = s.player;
+            if (distToSegment(p.x, p.y, a.x, a.y, c.x, c.y) < 9 + p.r) s.hurtPlayer(dmg, a.x, a.y, this);
+            s.fx.lightning(a.x, a.y, c.x, c.y, 0xfff3c4);
+            s.sfx('zap');
+          }, this));
+        }
+        rest(1.9);
+        break;
+      }
+      case 'orbit': {
+        let k = 0;
+        s.repeat(0.15, 14, () => {
+          if (!this.alive) return;
+          for (let arm = 0; arm < 3; arm++) s.enemyShot(this.x, this.y, k * 0.28 + (arm / 3) * Math.PI * 2, 80, dmg * 0.7, 'p_orb', 5, { accel: 70, tint: 0x9fd8ff });
+          k++;
+        });
+        rest(2.4);
+        break;
+      }
+      case 'summonA': {
+        for (let i = 0; i < 2 + this.phase; i++) s.spawnEnemyDelayed(pick(['mite', 'mite', 'weaver']), s.findOpenSpot(140, t.x, t.y));
+        rest(1.2);
+        break;
+      }
+      case 'collapseG': {
+        // gravity collapse: pulls you inward while rings expand outward
+        s.banner('Gravity collapse!', 'Dash away from the Arbiter');
+        s.addZone({ x: this.x, y: this.y, r: 260, kind: 'gravity', team: 'enemy', dmg: 0, tick: 1, life: 3 });
+        s.repeat(0.7, 4, () => {
+          if (!this.alive) return;
+          const n = 16;
+          const off = Math.random();
+          for (let i = 0; i < n; i++) s.enemyShot(this.x, this.y, off + (i / n) * Math.PI * 2, 120, dmg * 0.7, 'p_orb', 5, { tint: 0xc8e0ff });
+        });
+        rest(3.2);
+        break;
+      }
+      case 'judgment': {
+        // three quadrants are judged; one stays safe — twice
+        const b = s.bounds;
+        const mx = (b.x + b.r) / 2;
+        const my = (b.y + b.b) / 2;
+        const quads = [[(b.x + mx) / 2, (b.y + my) / 2], [(mx + b.r) / 2, (b.y + my) / 2], [(b.x + mx) / 2, (my + b.b) / 2], [(mx + b.r) / 2, (my + b.b) / 2]];
+        for (let round = 0; round < 2; round++) {
+          s.delay(round * 1.8, () => {
+            if (!this.alive) return;
+            const safe = Math.floor(Math.random() * 4);
+            quads.forEach(([qx, qy], i) => {
+              if (i === safe) {
+                s.fx.ring(qx, qy, 60, 0x5affb0, 1.4, 4);
+                return;
+              }
+              const R = Math.min(mx - b.x, my - b.y) * 0.95;
+              s.addTelegraph(new Telegraph({ kind: 'circle', x: qx, y: qy, r: R }, 1.5, 0xffcf5a, () => {
+                s.aoeEnemy(qx, qy, R * 0.92, dmg * 1.2);
+                s.fx.pillar(qx, qy, 0xffcf5a);
+              }, this));
+            });
+          });
+        }
+        s.banner('Judgment', 'Find the safe quadrant');
+        rest(4.2);
         break;
       }
       default:

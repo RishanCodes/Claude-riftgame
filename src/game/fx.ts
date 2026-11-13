@@ -93,13 +93,19 @@ export class Fx {
     return App.save.settings.shake;
   }
 
+  get low() {
+    return App.save.settings.effects === 'low';
+  }
+
   burst(x: number, y: number, color: number, n: number, speed = 120) {
+    if (this.low) n = Math.ceil(n / 3);
     this.tint = color;
     this.burstSpeed = speed;
     this.sparks.explode(Math.min(n, 30), x, y);
   }
 
   mote(x: number, y: number, color: number, vy = -30) {
+    if (this.low && Math.random() < 0.6) return;
     this.moteTint = color;
     this.moteVy = vy;
     this.motes.explode(1, x, y);
@@ -153,6 +159,7 @@ export class Fx {
   }
 
   ghost(sprite: Phaser.GameObjects.Image, color: number) {
+    if (this.low) return;
     const g = this.scene.add.image(sprite.x, sprite.y, sprite.texture.key).setScale(sprite.scaleX, sprite.scaleY).setOrigin(sprite.originX, sprite.originY).setFlipX(sprite.flipX).setRotation(sprite.rotation).setTintFill(color).setAlpha(0.5).setDepth(sprite.depth - 1).setBlendMode(Phaser.BlendModes.ADD);
     this.scene.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => g.destroy() });
   }

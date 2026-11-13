@@ -12,7 +12,17 @@ export type Behavior =
   | 'leaper'
   | 'magma'
   | 'seer'
-  | 'totem';
+  | 'totem'
+  | 'knight'
+  | 'stalker'
+  | 'chaplain'
+  | 'hound'
+  | 'weaver'
+  | 'mite'
+  | 'lurker'
+  | 'sentinel';
+
+export type Personality = 'aggressive' | 'defensive' | 'tactical' | 'adaptive';
 
 export interface EnemyDef {
   id: string;
@@ -33,6 +43,7 @@ export interface EnemyDef {
   kbResist?: number;
   desc: string;
   tip: string;
+  personality?: Personality;
 }
 
 export const ENEMIES: EnemyDef[] = [
@@ -110,6 +121,56 @@ export const ENEMIES: EnemyDef[] = [
     hp: 110, dmg: 16, speed: 0, radius: 15, cost: 3, gold: 5, element: 'fire', stationary: true, kbResist: 1,
     desc: 'A carved idol pulsing with infernal heat. It calls down eruptions around its enemies.',
     tip: 'Glowing runes appear under you before erupting. Keep moving.',
+  },
+  // ───────── Act IV · Fractured Citadel ─────────
+  {
+    id: 'knight', name: 'Rift Knight', biome: 3, behavior: 'knight', role: 'Defensive', personality: 'defensive',
+    hp: 170, dmg: 22, speed: 55, radius: 16, cost: 3, gold: 7, armor: 0.1, kbResist: 0.7,
+    desc: 'A fallen defender of the Citadel whose tower shield still turns aside every frontal blow.',
+    tip: 'Its shield blocks 80% of damage from the front. Strike from the sides or behind — or wait for its lunge to end.',
+  },
+  {
+    id: 'stalker', name: 'Warp Stalker', biome: 3, behavior: 'stalker', role: 'Mobile', personality: 'tactical',
+    hp: 70, dmg: 18, speed: 110, radius: 12, cost: 2, gold: 5, element: 'shadow',
+    desc: 'A predator that folds space to appear behind its prey.',
+    tip: 'A violet sigil marks where it will reappear. Turn and dodge when it vanishes.',
+  },
+  {
+    id: 'chaplain', name: 'Rift Chaplain', biome: 3, behavior: 'chaplain', role: 'Support', personality: 'defensive',
+    hp: 75, dmg: 10, speed: 70, radius: 13, cost: 2.5, gold: 6, element: 'light',
+    desc: 'A fanatic who mends and shields its allies with stolen rift-light.',
+    tip: 'Shields and heals nearby enemies. Kill it first.',
+  },
+  {
+    id: 'hound', name: 'Void Hound', biome: 3, behavior: 'hound', role: 'Pack', personality: 'aggressive',
+    hp: 52, dmg: 13, speed: 135, radius: 12, cost: 1.2, gold: 3, element: 'shadow',
+    desc: 'Rift-hounds that circle their prey and strike together.',
+    tip: 'They spread out to surround you, then lunge at once. Keep moving so they cannot close the circle.',
+  },
+  // ───────── Act V · Astral Crucible ─────────
+  {
+    id: 'weaver', name: 'Star Weaver', biome: 4, behavior: 'weaver', role: 'Ranged', personality: 'tactical',
+    hp: 80, dmg: 20, speed: 65, radius: 13, cost: 2.5, gold: 6, element: 'light',
+    desc: 'A many-armed astral entity that threads beams of starlight through the battlefield.',
+    tip: 'Aims a laser line where you are heading. Change direction when the line appears.',
+  },
+  {
+    id: 'mite', name: 'Void Mite', biome: 4, behavior: 'mite', role: 'Swarm', personality: 'aggressive',
+    hp: 34, dmg: 20, speed: 150, radius: 10, cost: 0.8, gold: 2, element: 'shadow',
+    desc: 'Unstable specks of void that detonate when they reach you.',
+    tip: 'They flash before exploding. Kill them at range or dash away.',
+  },
+  {
+    id: 'lurker', name: 'Gravity Lurker', biome: 4, behavior: 'lurker', role: 'Area Control', personality: 'adaptive',
+    hp: 130, dmg: 14, speed: 30, radius: 15, cost: 3, gold: 7, kbResist: 0.8,
+    desc: 'A dense astral body that bends gravity around itself.',
+    tip: 'Creates wells that drag you in while it fires slow orbs. Fight from the edge of the pull.',
+  },
+  {
+    id: 'sentinel', name: 'Astral Sentinel', biome: 4, behavior: 'sentinel', role: 'Elite Tactician', personality: 'adaptive',
+    hp: 210, dmg: 22, speed: 70, radius: 16, cost: 4, gold: 9, armor: 0.15, kbResist: 0.6, element: 'lightning',
+    desc: 'A construct that studies its opponent and answers with the right tool.',
+    tip: 'Raises a mirror ward that reflects projectiles back. Melee it, or hold fire while the ward glows.',
   },
 ];
 

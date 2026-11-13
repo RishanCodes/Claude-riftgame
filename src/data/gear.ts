@@ -46,6 +46,7 @@ export interface GearDef {
   props?: WeaponProps;
   powers?: string[];
   grant?: Element; // accessory/armor that adds an element to your strikes
+  exclusive?: string; // boss id: only drops from that boss (or Boss Rush / crafting once discovered)
   desc: string;
 }
 
@@ -102,7 +103,7 @@ export const GEAR: GearDef[] = [
   // ───────── Archer ─────────
   ...weapons('archer', [
     ['b_hunter', "Hunter's Bow", 0, 'bow', ['#8a5a30', '#e0d8c0', '#6aa84a'], { dmg: 4 }, null, 'A sturdy yew bow.'],
-    ['b_windrunner', 'Windrunner Bow', 0, 'recurve', ['#b6f5c8', '#5a8a6a', '#ffffff'], { as: 0.25, ms: 0.05 }, { element: 'wind', speed: 1.3 }, 'Light and fast. Arrows ride the wind.'],
+    ['b_windrunner', 'Windrunner Bow', 0, 'recurve', ['#b6f5c8', '#5a8a6a', '#ffffff'], { dmg: 2, as: 0.25, ms: 0.05 }, { element: 'wind', speed: 1.3 }, 'Light and fast. Arrows ride the wind.'],
     ['b_thornwood', 'Thornwood Longbow', 1, 'longbow', ['#5a3a1e', '#7ab84a', '#c2d65a'], { dmg: 6, rng: 0.15 }, { pierce: 2, poison: 0.25 }, 'Barbed arrows pierce two foes and fester.'],
     ['b_frost', 'Frostshot Recurve', 1, 'recurve', ['#9feaff', '#2a4a7a', '#ffffff'], { dmg: 4 }, { element: 'ice', multishot: 1 }, 'Looses two freezing arrows.'],
     ['b_storm', 'Stormstring', 2, 'bow', ['#4a4a6a', '#ffe04a', '#ffffff'], { dmg: 5, as: 0.1 }, { element: 'lightning', chain: 2 }, 'Arrows crackle and leap between enemies.'],
@@ -123,14 +124,14 @@ export const GEAR: GearDef[] = [
   ]),
   // ───────── Summoner ─────────
   ...weapons('summoner', [
-    ['u_totem', 'Spirit Totem', 0, 'totem', ['#8a6a4a', '#5ad8c8', '#ffffff'], { dmg: 2 }, null, 'Calls two loyal spirits.'],
-    ['u_bone', 'Bonecaller Staff', 0, 'staff', ['#e0d8c0', '#5a5a6a', '#9aff9a'], {}, { summons: 1, compDmg: -0.15 }, 'One more spirit, each a little weaker.'],
-    ['u_verdant', 'Verdant Idol', 1, 'idol', ['#4f8a3a', '#c2d65a', '#ff9ac8'], { hp: 20 }, { element: 'earth', compDmg: 0.3 }, 'Spirits strike with the weight of stone (Fracture).'],
-    ['u_wisp', 'Wisp Lantern', 1, 'lantern', ['#ffcf5a', '#3a2a1a', '#fff3c4'], {}, { summons: 2, compDmg: -0.35, compRate: 0.25 }, 'A swarm of quick little wisps.'],
-    ['u_beast', "Beastmaster's Scepter", 2, 'staff', ['#a86a3a', '#ff9a3c', '#ffe04a'], { dmg: 3 }, { summons: -1, compDmg: 0.9, compStyle: 'melee' }, 'Fewer companions, but they are beasts that maul in melee.'],
-    ['u_necro', "Necromancer's Grimoire", 2, 'tome', ['#2a3a2a', '#9aff9a', '#e0d8c0'], {}, { raise: 0.25 }, 'Slain enemies may rise as temporary spirits.'],
-    ['u_celestial', 'Celestial Conduit', 3, 'orb', ['#fff3c4', '#5a8aff', '#ffffff'], { ad: 0.2 }, { element: 'light', compDmg: 0.3, compPierce: 2 }, 'Radiant spirits whose bolts pierce.'],
-    ['u_relic', "Sovereign's Relic", 4, 'idol', ['#ffcf5a', '#6a2a8a', '#ff4f6d'], { hp: 20 }, { summons: 1, compDmg: 0.4, chain: 2 }, 'A crown of souls: more spirits whose bolts chain.'],
+    ['u_totem', 'Spirit Totem', 0, 'totem', ['#8a6a4a', '#5ad8c8', '#ffffff'], { dmg: 4 }, null, 'Calls two loyal spirits.'],
+    ['u_bone', 'Bonecaller Staff', 0, 'staff', ['#e0d8c0', '#5a5a6a', '#9aff9a'], { dmg: 3 }, { summons: 1, compDmg: -0.15 }, 'One more spirit, each a little weaker.'],
+    ['u_verdant', 'Verdant Idol', 1, 'idol', ['#4f8a3a', '#c2d65a', '#ff9ac8'], { dmg: 4, hp: 20 }, { element: 'earth', compDmg: 0.3 }, 'Spirits strike with the weight of stone (Fracture).'],
+    ['u_wisp', 'Wisp Lantern', 1, 'lantern', ['#ffcf5a', '#3a2a1a', '#fff3c4'], { dmg: 4 }, { summons: 2, compDmg: -0.35, compRate: 0.25 }, 'A swarm of quick little wisps.'],
+    ['u_beast', "Beastmaster's Scepter", 2, 'staff', ['#a86a3a', '#ff9a3c', '#ffe04a'], { dmg: 6 }, { summons: -1, compDmg: 0.9, compStyle: 'melee' }, 'Fewer companions, but they are beasts that maul in melee.'],
+    ['u_necro', "Necromancer's Grimoire", 2, 'tome', ['#2a3a2a', '#9aff9a', '#e0d8c0'], { dmg: 5 }, { raise: 0.25 }, 'Slain enemies may rise as temporary spirits.'],
+    ['u_celestial', 'Celestial Conduit', 3, 'orb', ['#fff3c4', '#5a8aff', '#ffffff'], { dmg: 8, ad: 0.2 }, { element: 'light', compDmg: 0.3, compPierce: 2 }, 'Radiant spirits whose bolts pierce.'],
+    ['u_relic', "Sovereign's Relic", 4, 'idol', ['#ffcf5a', '#6a2a8a', '#ff4f6d'], { dmg: 9, hp: 20 }, { summons: 1, compDmg: 0.4, chain: 2 }, 'A crown of souls: more spirits whose bolts chain.'],
   ]),
 
   // ───────── Armor (armor / helmet / boots) ─────────
@@ -192,6 +193,24 @@ export const GEAR: GearDef[] = [
 function A(id: string, name: string, slot: Slot, rarity: Rarity, icon: string, colors: [string, string, string], st: Record<string, number>, desc: string, powers: string[] = [], grant?: Element): GearDef {
   return { id, name, slot, rarity, icon, colors, main: S(st), powers, grant, desc };
 }
+
+// ───────── Boss-exclusive relics ─────────
+const X = (id: string, name: string, slot: Slot, rarity: Rarity, icon: string, colors: [string, string, string], st: Record<string, number>, desc: string, powers: string[], boss: string): GearDef =>
+  ({ ...A(id, name, slot, rarity, icon, colors, st, desc, powers), exclusive: boss });
+GEAR.push(
+  X('x_heartseed', "Thornmother's Heartseed", 'amulet', 3, 'amulet', ['#4f8a3a', '#ff9ac8', '#c8ff5a'], { hpP: 0.1 }, 'Kills have a 20% chance to sprout a healing blossom.', ['bloomKills'], 'thornmother'),
+  X('x_briarcrown', 'Briar Crown', 'helmet', 2, 'hat', ['#3f7a3a', '#d05a8a', '#c2d65a'], { hp: 20, arm: 6 }, 'Attackers take 80% of your damage and are knocked back.', ['thorns', 'spiked'], 'thornmother'),
+  X('x_oathplate', "Warden's Oathplate", 'armor', 3, 'armor', ['#9fc8f0', '#e0f8ff', '#9feaff'], { hp: 45, arm: 12 }, 'Frozen and chilled enemies take 40% more damage from you.', ['frostOath'], 'glacius'),
+  X('x_frostvow', 'Frozen Vow', 'ring', 2, 'ring', ['#c8f0ff', '#ffffff', '#9feaff'], { dcd: -0.1 }, 'Perfect dodges freeze enemies around you.', ['pdFreeze'], 'glacius'),
+  X('x_heraldeye', "Herald's Eye", 'amulet', 4, 'amulet', ['#2a1440', '#ff7a2f', '#ffe9a0'], { ad: 0.2 }, 'Every 10s, your next special deals double damage.', ['heraldEye'], 'tyrant'),
+  X('x_ashwalk', 'Ashwalker Greaves', 'boots', 3, 'boots', ['#3a2626', '#ff7a2f', '#ffe04a'], { ms: 0.06 }, 'Dodging leaves fire and grants +40% move speed for 2s.', ['embertrail', 'windwalker'], 'tyrant'),
+  X('x_kingcrown', 'Crown of the Shattered King', 'helmet', 4, 'helm', ['#c8b0ff', '#ffcf5a', '#ffffff'], { crit: 0.06, hp: 20 }, 'Combo finishers are repeated by a mirror image at 60% damage.', ['mirrorFinisher'], 'king'),
+  X('x_mirrorshard', 'Mirror Shard', 'ring', 3, 'ring', ['#e0d8ff', '#ffffff', '#a25cff'], { dcd: -0.08 }, 'Perfect dodges leave an exploding mirror decoy.', ['pdDecoy'], 'king'),
+  X('x_carapace', 'Astral Carapace', 'armor', 4, 'robe', ['#18203a', '#9fd8ff', '#ffcf5a'], { hp: 50, arm: 10 }, 'Every 6s, a gravity pulse drags nearby enemies in and damages them.', ['gravPulse'], 'arbiter'),
+  X('x_orrery', 'Orrery Pendant', 'amulet', 3, 'amulet', ['#ffcf5a', '#9fd8ff', '#ffffff'], { ep: 0.1 }, 'Three stars orbit you, damaging enemies they touch.', ['orbitStars'], 'arbiter'),
+);
+
+export const EXCLUSIVES_OF = (boss: string) => GEAR.filter((g) => g.exclusive === boss).map((g) => g.id);
 
 export const STARTER_WEAPON: Record<ClassId, string> = {
   swordsman: 'w_iron', assassin: 'a_shadow', mage: 'm_apprentice', archer: 'b_hunter', guardian: 'g_iron', summoner: 'u_totem',

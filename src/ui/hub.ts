@@ -974,6 +974,7 @@ export const HubUI = {
       <div class="col" style="margin-top:8px">
         <button class="btn block" data-act="export">Show backup code</button>
         <button class="btn block" data-act="import">Restore from backup code</button>
+        <button class="btn block" data-act="redeem">Redeem a gift code</button>
         <button class="btn danger block" data-act="reset">Reset all progress</button>
       </div>`;
     const sh = sheet('Settings', 'gear', body);
@@ -1017,6 +1018,33 @@ export const HubUI = {
           } else box.remove();
         });
       }
+      if (act === 'redeem') {
+        const box = el(`<div class="screen clear-bg" style="z-index:80"><div class="spacer"></div><div class="panel" style="padding:16px;max-width:380px;width:100%">
+          <h2 style="font-size:18px">Redeem gift code</h2>
+          <input id="gift-code" class="codebox" style="min-height:0;font-size:16px;text-transform:uppercase" placeholder="Enter code" autocomplete="off">
+          <div data-r="msg" style="font-size:14px;margin-top:6px"></div>
+          <div class="row" style="margin-top:8px"><button class="btn grow" data-act="cancel">Close</button><button class="btn primary grow" data-act="go">Redeem</button></div></div><div class="spacer"></div></div>`);
+        uiRoot().appendChild(box);
+        onAct(box, (a) => {
+          if (a === 'cancel') {
+            box.remove();
+            sh.remove();
+            return this.settings();
+          }
+          const code = box.querySelector<HTMLInputElement>('input')!.value.trim().toUpperCase();
+          const msg = box.querySelector<HTMLElement>('[data-r=msg]')!;
+          const gift = GIFT_CODES[code];
+          if (!gift) {
+            msg.innerHTML = '<span class="bad">That code is not valid.</span>';
+            return;
+          }
+          App.save.gold += gift.gold;
+          App.save.shards += gift.shards;
+          App.persist();
+          audio.play('legendary');
+          msg.innerHTML = `<span class="good">+${gift.gold.toLocaleString()} gold and +${gift.shards.toLocaleString()} Rift Shards added!</span>`;
+        });
+      }
       if (act === 'import') {
         const box = el(`<div class="screen clear-bg" style="z-index:80"><div class="spacer"></div><div class="panel" style="padding:16px;max-width:380px;width:100%">
           <h2 style="font-size:18px">Restore progress</h2><p class="muted" style="font-size:13px">Paste a backup code. This replaces your current progress.</p>
@@ -1054,6 +1082,11 @@ export const HubUI = {
       }
     });
   },
+};
+
+/** Gift codes (testing / promotions). Each redemption adds the reward. */
+const GIFT_CODES: Record<string, { gold: number; shards: number }> = {
+  CHESTTEST: { gold: 250000, shards: 10000 },
 };
 
 const spriteCache = new Map<string, string>();

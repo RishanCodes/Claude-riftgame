@@ -487,3 +487,21 @@ h1, h2, h3, .head { font-family: var(--head); letter-spacing: 0.04em; margin: 0;
 .cg .slot { width: 64px; height: 64px; margin: 0 auto; display: flex; cursor: pointer; }
 .cgn { font-family: var(--head); font-size: 11px; font-weight: 700; margin-top: 4px; line-height: 1.15; }
 .cgr { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.timer-line { position: absolute; left: 50%; transform: translateX(-50%); top: calc(84px + var(--sat)); font-family: var(--head); font-weight: 900; font-size: 20px; color: #ff9a9a; text-shadow: 0 0 10px rgba(255,60,80,0.7), 0 2px 0 #000; pointer-events: none; }
+
+/* ───────── Sets, familiars, skins, achievements ───────── */
+.setbox { margin-top: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--sc) 50%, transparent); background: color-mix(in srgb, var(--sc) 8%, transparent); text-align: left; font-size: 13px; color: var(--dim); }
+.setbox b { color: var(--sc); font-family: var(--head); }
+.setbox .setp { font-size: 12px; margin: 3px 0; }
+.setbox .on { color: #e8e0f8; }
+.pet-slot { width: 56px; height: 56px; flex: none; aspect-ratio: auto; }
+.pet-row .pet-img { width: 46px; height: 42px; image-rendering: pixelated; flex: none; }
+.pet-row.sel { border-color: var(--pc); box-shadow: 0 0 0 1px var(--pc); }
+.skin-row { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 8px; touch-action: pan-x; }
+.skin { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 10px; background: rgba(0,0,0,0.35); border: 1px solid var(--edge); color: var(--text); font-size: 10px; font-family: var(--body); cursor: pointer; }
+.skin img { width: 34px; height: 40px; image-rendering: pixelated; }
+.skin.on { border-color: var(--gold); box-shadow: 0 0 10px rgba(255,207,90,0.4); }
+.skin.locked img { filter: grayscale(1) brightness(0.5); }
+.skin span { line-height: 1.1; text-align: center; }
+.ach-done { border-color: rgba(255,207,90,0.45); }

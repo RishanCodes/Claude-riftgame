@@ -46,7 +46,7 @@ interface Pickup {
 }
 
 interface Interactable {
-  kind: 'chest' | 'shrine' | 'merchant' | 'altar' | 'door';
+  kind: 'chest' | 'shrine' | 'merchant' | 'altar' | 'door' | 'anvil' | 'stone';
   x: number;
   y: number;
   r: number;
@@ -74,6 +74,8 @@ interface Timer {
 const ROOM_COLORS: Record<RoomType, number> = {
   start: 0x7fb4ff,
   arena: 0xa25cff,
+  anvil: 0xffb04a,
+  rtrial: 0xff5a5a,
   combat: 0x7fb4ff,
   elite: 0xff5a5a,
   treasure: 0xffcf5a,
@@ -86,6 +88,8 @@ const ROOM_COLORS: Record<RoomType, number> = {
 export const ROOM_NAMES: Record<RoomType, string> = {
   start: 'Rift Entrance',
   arena: 'Arena',
+  anvil: 'Rift Anvil',
+  rtrial: 'Rift Trial',
   combat: 'Battle',
   elite: 'Elite',
   treasure: 'Treasure',
@@ -349,6 +353,14 @@ export class RunScene extends Phaser.Scene {
       } else if (t === 'event') {
         this.addInteractable('altar', cx, cy, 'altar', 22);
         this.banner('A Strange Presence', 'Approach to investigate');
+      } else if (t === 'anvil') {
+        this.addInteractable('anvil', cx, cy, 'shrine', 22);
+        this.interactables[this.interactables.length - 1].img?.setTint(0xffb04a);
+        this.banner('Rift Anvil', 'Temper one of your blessings');
+      } else if (t === 'rtrial') {
+        this.addInteractable('stone', cx, cy, 'altar', 22);
+        this.interactables[this.interactables.length - 1].img?.setTint(0xff5a5a);
+        this.banner('Rift Trial', 'Touch the stone to accept a challenge — or walk on by');
       }
       this.openDoors();
     }
@@ -419,7 +431,7 @@ export class RunScene extends Phaser.Scene {
       if (this.roomState === 'dead') return;
       const e = this.spawnEnemy(id, p.x, p.y);
       if (mode === 'elite') {
-        e.makeElite(pick<EliteAffix>(['swift', 'armored', 'enraged']));
+        e.makeElite(pick<EliteAffix>(['swift', 'armored', 'enraged', 'vampiric', 'splitting', 'warded', 'volatile']));
         UI.hud.toast(`${e.name} appears!`, '#ffcf5a');
       } else if (mode === 'champ') e.makeChampion();
       this.fx.burst(p.x, p.y, 0xa25cff, 10, 100);
@@ -527,6 +539,7 @@ export class RunScene extends Phaser.Scene {
     if (this.roomState === 'fight') {
       this.hazardTick(dt);
       if (this.roomType === 'arena') this.arenaTick(dt);
+      if (this.roomType === 'rtrial') this.trialTick(dt);
       if (this.run.has('timed') && this.run.elapsed - this.timerStart > 300 && this.player.alive) {
         this.banner('The rift collapses', 'Time ran out');
         this.run.hp = 0;
@@ -535,7 +548,7 @@ export class RunScene extends Phaser.Scene {
     }
     this.orbitTick(dt);
     // clear check
-    if (this.roomState === 'fight' && this.roomType !== 'arena' && this.waveIdx >= this.waves.length && this.pendingSpawns === 0 && this.enemies.length === 0 && !this.boss && this.combatTime > 0.5) {
+    if (this.roomState === 'fight' && this.roomType !== 'arena' && this.roomType !== 'rtrial' && this.waveIdx >= this.waves.length && this.pendingSpawns === 0 && this.enemies.length === 0 && !this.boss && this.combatTime > 0.5) {
       this.onCleared();
     }
 
@@ -642,7 +655,7 @@ export class RunScene extends Phaser.Scene {
       if (!k.alive) continue;
       k.t += dt;
       const d = dist(k.x, k.y, p.x, p.y);
-      if ((magnetAll && k.t > 0.4) || d < 70) {
+      if ((magnetAll && k.t > 0.4) || d < (p.petId === 'gold' ? 170 : 70)) {
         const a = Math.atan2(p.y - k.y, p.x - k.x);
         const sp = 260 + k.t * 120;
         k.vx += (Math.cos(a) * sp - k.vx) * Math.min(1, dt * 8);
@@ -767,6 +780,52 @@ export class RunScene extends Phaser.Scene {
   }
 
   // ───────────────────────── Ascension systems ─────────────────────────
+  /** Rift Trial room: survive 25s of escalating waves for an Epic+ reward. */
+  startRiftTrial() {
+    this.roomState = 'fight';
+    this.trialT = 25;
+    this.trialWaveT = 0;
+    this.banner('Survive!', '25 seconds');
+    this.sfx('bossRoar');
+  }
+
+  trialTick(dt: number) {
+    if (this.trialT <= 0) return;
+    this.trialT -= dt;
+    this.trialWaveT -= dt;
+    UI.hud.toastTimer(`Trial: ${Math.ceil(Math.max(0, this.trialT))}s`);
+    if (this.trialWaveT <= 0 && this.trialT > 4) {
+      this.trialWaveT = 6;
+      this.waves.push(this.buildWaves('combat')[0]);
+      this.spawnWave();
+    }
+    if (this.trialT <= 0) void this.finishRiftTrial();
+  }
+
+  async finishRiftTrial() {
+    const run = this.run;
+    for (const e of this.enemies) if (e.alive) {
+      this.fx.burst(e.x, e.y, 0xffcf5a, 10, 120);
+      e.destroyNow();
+    }
+    this.enemies = [];
+    this.pendingSpawns = 0;
+    this.telegraphs = [];
+    for (const pr of this.projectiles) if (pr.team === 'enemy') pr.destroy();
+    this.roomState = 'calm';
+    UI.hud.toastTimer('');
+    this.sfx('victory');
+    this.banner('Trial complete!');
+    run.shards += 3;
+    const item = run.rollItem(2, 0.8);
+    await this.wait(0.8);
+    await this.modal(() => UI.run.itemReveal(item, this));
+    this.checkpoint();
+  }
+
+  trialT = 0;
+  trialWaveT = 0;
+
   /** Endless Survival: escalating waves, boss every 5th, rewards between waves. */
   arenaTick(dt: number) {
     const run = this.run;
@@ -1115,6 +1174,10 @@ export class RunScene extends Phaser.Scene {
     if (src && src.st.radiance > 0) dmg *= 0.75;
     dmg = Math.max(1, Math.round(dmg));
     run.hp -= dmg;
+    if (src && src.alive && src.elite === 'vampiric') {
+      src.hp = Math.min(src.maxHp, src.hp + src.maxHp * 0.08);
+      this.fx.burst(src.x, src.y, 0xff3a5a, 6, 60);
+    }
     p.invuln = isZone ? 0.35 : 0.7;
     p.hurtT = 0.12;
     const a = Math.atan2(p.y - sy, p.x - sx);
@@ -1213,6 +1276,22 @@ export class RunScene extends Phaser.Scene {
         for (const o of this.enemiesNear(x, y, 62)) this.combat.hit(o, run.stats.damage * 1.3, { source: 'proc', element: el, color: 0xff9a3c, kb: 200, kbAngle: Math.atan2(o.y - y, o.x - x) });
         if (chance(0.3)) this.addZone({ x, y, r: 30, kind: 'ember', team: 'enemy', dmg: 6 + run.act * 3, tick: 0.5, life: 2.5 });
       });
+    }
+    if (e.elite === 'splitting') {
+      for (let i = -1; i <= 1; i += 2) {
+        const c = this.spawnEnemy(e.id, e.x + i * 18, e.y);
+        c.maxHp = c.hp = Math.round(c.maxHp * 0.8);
+        c.spawnT = 0.25;
+      }
+    }
+    if (e.elite === 'volatile') {
+      const x = e.x;
+      const y = e.y;
+      const dmg = e.dmg * 1.2;
+      this.addTelegraph(new Telegraph({ kind: 'circle', x, y, r: 64 }, 0.9, 0xff5a1f, () => {
+        this.aoeEnemy(x, y, 64, dmg);
+        this.fx.explosion(x, y, 64, 0xff7a2f);
+      }));
     }
     if (e.isBoss) this.onBossDefeated(e as Boss);
   }
@@ -1518,6 +1597,27 @@ export class RunScene extends Phaser.Scene {
         this.checkpoint();
         await this.modal(() => UI.run.event(this));
         it.img?.setTint(0x6a6a7a);
+        return;
+      }
+      case 'anvil': {
+        it.used = true;
+        run.usedNodes.push(run.nodeId);
+        await this.modal(() => UI.run.anvil(this));
+        this.checkpoint();
+        it.img?.setTint(0x6a6a7a);
+        return;
+      }
+      case 'stone': {
+        const ok = await this.modal(() => UI.run.trialOffer());
+        if (!ok) {
+          it.armed = false;
+          return;
+        }
+        it.used = true;
+        run.usedNodes.push(run.nodeId);
+        this.checkpoint();
+        it.img?.setTint(0x6a6a7a);
+        this.startRiftTrial();
         return;
       }
     }

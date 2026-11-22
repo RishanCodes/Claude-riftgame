@@ -9,6 +9,7 @@ import { App } from '../../app';
 import { getBase, weaponProps } from '../../data/items';
 import type { WeaponProps } from '../../data/gear';
 import { getSpec, masteryLevel, SPEC_LEVEL } from '../../data/modes';
+import { getPet } from '../../data/extras';
 import { track } from '../objectives';
 import { equippedItems } from '../stats';
 import { iconCanvasKey } from '../textures';
@@ -98,6 +99,14 @@ export class Player {
   specials = 0;
   heraldT = 10;
   spec = '';
+  skinKey = '';
+  petId = '';
+  petLvl = 0;
+  pet?: Phaser.GameObjects.Image;
+  petX = 0;
+  petY = 0;
+  petT = 2;
+  petT2 = 0;
   lastStepGuard = -10;
   stepRefunded = false;
   aimA = 0;
@@ -113,7 +122,17 @@ export class Player {
     const wIcon = this.weapon ? getBase(this.weapon.base).icon : 'i_sword1';
     this.sword = scene.add.image(x, y, iconCanvasKey(scene, wIcon)).setScale(0.55).setOrigin(0.18, 0.82).setDepth(100 + y);
     if (this.weapon && this.weapon.rarity >= 4) this.glow = scene.add.image(x, y, 'fx_glow').setTint(0xff5a9a).setBlendMode(Phaser.BlendModes.ADD).setScale(0.7).setAlpha(0.5);
-    this.sprite = scene.add.image(x, y, `pl_${this.cls}_0`).setScale(2).setOrigin(0.5, 0.62).setDepth(100 + y);
+    const sk = App.save.skin[this.cls];
+    this.skinKey = sk && App.save.ownedSkins.includes(sk) ? `${this.cls}_${sk}` : this.cls;
+    const pd = getPet(App.save.pet);
+    if (pd && (App.save.pets[pd.id]?.lvl ?? 0) > 0) {
+      this.petId = pd.id;
+      this.petLvl = App.save.pets[pd.id].lvl;
+      this.pet = scene.add.image(x - 20, y, pd.tex + '_0').setScale(1.8).setTint(pd.tint);
+      this.petX = x - 20;
+      this.petY = y;
+    }
+    this.sprite = scene.add.image(x, y, `pl_${this.skinKey}_0`).setScale(2).setOrigin(0.5, 0.62).setDepth(100 + y);
     this.shieldGfx = scene.add.image(x, y, 'fx_ring').setScale(1.4).setTint(0x9fd8ff).setAlpha(0).setDepth(1400).setBlendMode(Phaser.BlendModes.ADD);
     this.attack = ATTACKS[this.cls] ?? ATTACKS.swordsman;
     this.special = SPECIALS[this.cls] ?? SPECIALS.swordsman;
@@ -328,6 +347,59 @@ export class Player {
     });
   }
 
+  /** Familiar: follows behind you and acts on its own timer. */
+  updatePet(dt: number) {
+    if (!this.pet) return;
+    const s = this.scene;
+    const l = this.petLvl;
+    const tx = this.x + (this.flip ? 22 : -22);
+    const ty = this.y - 14;
+    const k = Math.min(1, dt * 4);
+    this.petX += (tx - this.petX) * k;
+    this.petY += (ty - this.petY) * k;
+    this.petT2 += dt;
+    const pd = getPet(this.petId)!;
+    this.pet.setPosition(this.petX, this.petY + Math.sin(this.petT2 * 4) * 3).setDepth(100 + this.petY + 20);
+    this.pet.setTexture(`${pd.tex}_${Math.floor(this.petT2 * 4) % 2}`).setFlipX(tx < this.petX - 1 ? true : this.flip);
+    const fighting = s.enemies.some((e) => e.alive);
+    this.petT -= dt;
+    if (this.petT > 0 || !fighting) return;
+    const dmg = this.stats.damage;
+    const near = s.nearestEnemy(this.petX, this.petY, 230);
+    switch (this.petId) {
+      case 'ember':
+        this.petT = 3 - l * 0.2;
+        if (near) s.playerShot({ x: this.petX, y: this.petY, angle: angleTo(this.petX, this.petY, near.x, near.y), speed: 280, dmg: dmg * (0.6 + 0.15 * (l - 1)), tex: 'p_fire', scale: 0.8, homing: 2, life: 1.2,
+          onHit: (e, pr) => s.combat.hit(e, pr.dmg, { source: 'proc', element: 'fire', kb: 40, silent: true }) });
+        break;
+      case 'heal':
+        this.petT = 5;
+        if (this.healthRatio() < 1) {
+          s.healPlayer(this.stats.maxHp * (0.015 + 0.005 * (l - 1)));
+          s.fx.ring(this.x, this.y, 24, 0x5affb0, 0.4, 3);
+        }
+        break;
+      case 'frost':
+        this.petT = 4;
+        s.fx.ring(this.x, this.y, 100, 0x9feaff, 0.4, 4);
+        for (const e of s.enemiesNear(this.x, this.y, 100)) {
+          s.combat.hit(e, dmg * (0.4 + 0.1 * (l - 1)), { source: 'proc', color: 0x9feaff, silent: true });
+          if (e.alive) s.combat.applyElement(e, 'ice', 1);
+        }
+        break;
+      case 'storm':
+        this.petT = 2.6 - l * 0.15;
+        if (near) s.combat.chainLightning(near, dmg * 0.5, 2 + Math.floor(l / 2));
+        break;
+      default:
+        this.petT = 99;
+    }
+  }
+
+  healthRatio() {
+    return this.run.hp / this.stats.maxHp;
+  }
+
   makeComp(life: number, melee = false): Companion {
     const el = this.wp.element;
     const tint = el ? ELEMENTS[el].color : this.cls === 'summoner' ? 0x8affe8 : 0xc8e8ff;
@@ -449,6 +521,7 @@ export class Player {
     this.special.update(this, dt);
     if (this.specialT <= 0 && this.stepT <= 0) this.attack.update(this, dt);
     this.updateCompanions(dt);
+    this.updatePet(dt);
 
     this.render(dt);
   }
@@ -495,6 +568,7 @@ export class Player {
       this.scene.fx.floatText(this.x, this.y - 30, "Herald's Gaze", '#ffb04a', 12);
     }
     this.special.cast(this, pow);
+    if (this.petId === 'moth') this.scene.healPlayer(this.stats.maxHp * (0.02 + 0.01 * this.petLvl));
     this.specials++;
     if (this.run.power('voidResonance') && this.specials % 3 === 0) {
       const blasts = this.run.power('syn_resonantecho') ? 2 : 1;
@@ -555,7 +629,7 @@ export class Player {
     const f = moving ? Math.floor(this.animT / 0.09) % 4 : 0;
     if (f !== this.frame) {
       this.frame = f;
-      this.sprite.setTexture(`pl_${this.cls}_${f}`);
+      this.sprite.setTexture(`pl_${this.skinKey}_${f}`);
     }
     const lookX = Math.cos(this.facing);
     if (Math.abs(lookX) > 0.15) this.flip = lookX < 0;

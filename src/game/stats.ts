@@ -6,6 +6,7 @@ import { itemAllMods, getBase, rankPowers, starsOf } from '../data/items';
 import { getBlessing } from '../data/blessings';
 import { getMutation, SYNERGIES } from '../data/mutations';
 import type { SaveData } from '../core/save';
+import { SETS, getPet } from '../data/extras';
 import { masteryLevel, masteryMods, getSpec, SPEC_LEVEL } from '../data/modes';
 
 export interface RunModsSource {
@@ -48,6 +49,23 @@ export function collectMods(save: SaveData, run?: RunModsSource): { mods: StatMo
     mods.push(...itemAllMods(it));
     for (const p of it.powers) addPower(p);
     for (const p of rankPowers(it.slot, starsOf(it))) addPower(p);
+  }
+  // gear sets
+  const bases = new Set(Object.values(eq).map((i) => i!.base));
+  for (const set of SETS) {
+    const n = set.pieces.filter((b) => bases.has(b)).length;
+    for (const [need, bonus] of [[2, set.two], [3, set.three]] as const) {
+      if (n < need) continue;
+      if (bonus.mods) mods.push(...bonus.mods);
+      for (const p of bonus.powers ?? []) addPower(p);
+    }
+  }
+  // familiar
+  const pet = getPet(save.pet);
+  const pl = pet ? save.pets[pet.id]?.lvl ?? 0 : 0;
+  if (pet && pl > 0) {
+    if (pet.mods) mods.push(...pet.mods(pl));
+    for (const p of pet.powers ?? []) addPower(p);
   }
   if (run) {
     for (const [id, lvl] of Object.entries(run.blessings)) {

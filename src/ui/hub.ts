@@ -16,6 +16,9 @@ import { confirmDialog, el, esc, fmtTime, onAct, uiRoot } from './dom';
 import { compareHTML, discoverItem, itemDetailsHTML, itemTile, SLOT_NAMES, starStr } from './itemview';
 import { stacks, canRankUp, rankUp, protectedIds, weaponClass, type Stack } from '../game/inventory';
 import { Cloud } from '../core/cloud';
+import { PETS, PET_MAX, petCost, getPet, SETS, EGG, skinsFor, SKINS, ACHIEVEMENTS } from '../data/extras';
+import { checkAchievements, achievementState, grantPet, rewardText } from '../game/achievements';
+import { weighted } from '../core/rng';
 import { CHESTS, chestCost, openChest, PITY, MULTI, type ChestDef } from '../data/chests';
 import { MODES, TRIALS, dailyFor, getModifier, masteryLevel, ROMAN, SPEC_LEVEL, specsFor, MASTERY_XP, type ModeId } from '../data/modes';
 import { objectives, claim, unclaimedCount } from '../game/objectives';
@@ -137,6 +140,7 @@ export const HubUI = {
     this.refresh();
     this.root.classList.add('on');
     if (App.save.activeRun && !document.querySelector('.resume-prompt')) this.resumePrompt();
+    setTimeout(() => this.achievementPopup(), 600);
     if (!App.save.tutorial['welcome']) {
       App.save.tutorial['welcome'] = true;
       App.persist();
@@ -162,7 +166,7 @@ export const HubUI = {
       <div class="logo"><h1>RIFTBOUND</h1><div class="tag">Emberfall Village</div></div>
       <div class="hub-main">
         <div class="hero-banner panel" data-act="heroes" style="--hc:${cls.color}">
-          <img src="${spriteUrl('pl_' + cls.id + '_0')}" alt="">
+          <img src="${spriteUrl(heroKey(cls.id))}" alt="">
           <div class="grow"><div class="eyebrow">Your hero</div><div class="nm" style="color:${cls.color}">${cls.name}</div><div class="sub">Power ${ps} · Tier ${s.tier}</div></div>
           <span class="chev">Change ›</span>
         </div>
@@ -175,7 +179,7 @@ export const HubUI = {
           <div class="bld panel" data-act="merchant">${icon('b_merchant', 'lg')}<div class="nm">Merchant</div><div class="sub">${s.merchant.stock.length} wares</div></div>
           <div class="bld panel" data-act="guild">${icon('b_guild', 'lg')}<div class="nm">Guild</div><div class="sub">Talents</div>${affordableTalent || unclaimedCount() ? '<span class="dot"></span>' : ''}</div>
           <div class="bld panel" data-act="codex">${icon('b_codex', 'lg')}<div class="nm">Codex</div><div class="sub">Lore</div></div>
-          <div class="bld panel" data-act="heroes"><img class="px-icon lg" src="${spriteUrl('pl_' + s.selectedClass + '_0')}" style="height:46px;width:40px"><div class="nm">Hero Hall</div><div class="sub">6 heroes</div></div>
+          <div class="bld panel" data-act="heroes"><img class="px-icon lg" src="${spriteUrl(heroKey(s.selectedClass))}" style="height:46px;width:40px"><div class="nm">Hero Hall</div><div class="sub">6 heroes</div></div>
         </div>
       </div>`;
   },
@@ -249,7 +253,7 @@ export const HubUI = {
     const tiers = Array.from({ length: s.maxTier }, (_, i) => i + 1);
     let body = '';
     if (view === 'modes') {
-      body = `<div class="li panel"><img src="${spriteUrl('pl_' + cls.id + '_0')}" style="width:40px;height:46px;image-rendering:pixelated">
+      body = `<div class="li panel"><img src="${spriteUrl(heroKey(cls.id))}" style="width:40px;height:46px;image-rendering:pixelated">
           <div class="grow"><div class="t" style="color:${cls.color}">${cls.name}</div><div class="d">Power ${powerScore(st)} · Mastery ${masteryLevel(s.mastery[cls.id] ?? 0).level}</div></div>
           <button class="btn small" data-act="hero">Change</button></div>
         <div class="section-title">Rift Tier <span class="muted" style="text-transform:none;letter-spacing:0">· tougher enemies, better loot</span></div>
@@ -327,14 +331,19 @@ export const HubUI = {
     const locked = !!s.activeRun;
     const bar = (n: number) => `<span class="bar5">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
     const body = `
-      <div class="hero-strip">${CLASSES.map((h, i) => `<button class="hs ${h.id === c.id ? 'on' : ''} ${h.id === s.selectedClass ? 'cur' : ''}" style="--hc:${h.color}" data-act="go-${i}"><img src="${spriteUrl('pl_' + h.id + '_0')}" alt="${h.name}"></button>`).join('')}</div>
+      <div class="hero-strip">${CLASSES.map((h, i) => `<button class="hs ${h.id === c.id ? 'on' : ''} ${h.id === s.selectedClass ? 'cur' : ''}" style="--hc:${h.color}" data-act="go-${i}"><img src="${spriteUrl(heroKey(h.id))}" alt="${h.name}"></button>`).join('')}</div>
       <div class="hero-stage" style="--hc:${c.color}">
         <button class="icon-btn nav" data-act="go-${idx - 1}" aria-label="Previous">‹</button>
-        <img class="hero-big" src="${spriteUrl('pl_' + c.id + '_' + 0)}" alt="">
+        <img class="hero-big" src="${spriteUrl(heroKey(c.id))}" alt="">
         <button class="icon-btn nav" data-act="go-${idx + 1}" aria-label="Next">›</button>
       </div>
       <div class="center"><div class="hero-name" style="color:${c.color}">${c.name}</div><div class="muted">${c.title}</div></div>
       <p class="hero-desc">${esc(c.desc)}</p>
+      <div class="skin-row">${[{ id: '', name: 'Classic' }, ...skinsFor(c.id)].map((k) => {
+        const owned = !k.id || s.ownedSkins.includes(k.id);
+        const cur = (s.skin[c.id] ?? '') === k.id;
+        return `<button class="skin ${cur ? 'on' : ''} ${owned ? '' : 'locked'}" data-act="skin-${k.id || 'none'}" title="${esc(k.name)}"><img src="${spriteUrl(k.id ? `pl_${c.id}_${k.id}_0` : `pl_${c.id}_0`)}"><span>${owned ? esc(k.name) : '🔒 ' + esc(k.name)}</span></button>`;
+      }).join('')}</div>
       <div class="hero-cols">
         <div class="panel pc"><div class="section-title">Strengths</div><ul>${(c.pros ?? []).map((t) => `<li class="good">+ ${esc(t)}</li>`).join('')}</ul></div>
         <div class="panel pc"><div class="section-title">Weaknesses</div><ul>${(c.cons ?? []).map((t) => `<li class="bad">− ${esc(t)}</li>`).join('')}</ul></div>
@@ -377,6 +386,23 @@ export const HubUI = {
         sh.remove();
         return this.heroes(Number(act.slice(3)));
       }
+      if (act.startsWith('skin-')) {
+        const id = act.slice(5) === 'none' ? '' : act.slice(5);
+        if (id && !s.ownedSkins.includes(id)) {
+          const a = ACHIEVEMENTS.find((x) => x.reward.skin === id);
+          audio.play('uiBack');
+          if (a) this.tipBox(`Unlock "${SKINS.find((k) => k.id === id)?.name}" with the achievement <b>${esc(a.name)}</b>: ${esc(a.desc)}`);
+          return;
+        }
+        s.skin[c.id] = id;
+        App.persist();
+        audio.play('ui');
+        const y = sh.querySelector('.sheet-body')!.scrollTop;
+        sh.remove();
+        this.heroes(idx);
+        uiRoot().querySelector('.sheet .sheet-body')!.scrollTop = y;
+        return;
+      }
       if (act.startsWith('spec-')) {
         if (masteryLevel(s.mastery[c.id] ?? 0).level < SPEC_LEVEL || s.activeRun) return audio.play('uiBack');
         s.spec[c.id] = act.slice(5);
@@ -412,6 +438,15 @@ export const HubUI = {
           <div><span class="muted">Atk Speed</span><span>${st.attackSpeed.toFixed(2)}/s</span></div><div><span class="muted">Armor</span><span>${st.armor.toFixed(0)}</span></div>
           <div><span class="muted">Crit</span><span>${Math.round(st.critChance * 100)}% · x${st.critDamage.toFixed(1)}</span></div><div><span class="muted">Move</span><span>${st.moveSpeed.toFixed(0)}</span></div>
         </div>
+        ${(() => {
+          const pd = getPet(s.pet);
+          const pl = pd ? s.pets[pd.id]?.lvl ?? 0 : 0;
+          const eqB = new Set(Object.values(eq).map((i) => i!.base));
+          const active = SETS.map((set) => ({ set, n: set.pieces.filter((b) => eqB.has(b)).length })).filter((x) => x.n >= 2);
+          return `<div class="li panel eq-row" data-act="pets"><div class="slot pet-slot"><img class="px-icon md" src="${pd ? tintedUrl(pd.tex + '_0', pd.tint) : spriteUrl('comp_0')}" style="${pd && pl ? `filter:drop-shadow(0 0 4px #${pd.tint.toString(16).padStart(6, '0')})` : 'opacity:.3;filter:grayscale(1)'}"></div>
+            <div class="grow"><div class="t">${pd && pl ? `${pd.name} <span class="gold-text">Lv ${pl}</span>` : 'No familiar'}</div><div class="d">${pd && pl ? esc(pd.desc(pl)) : 'Hatch Familiar Eggs at the Merchant or earn them from achievements'}</div></div><span class="chev">›</span></div>
+            ${active.length ? `<div class="section-title">Active set bonuses</div>${active.map((x) => `<div class="setbox" style="--sc:${x.set.color}"><b>${esc(x.set.name)} (${x.n}/3)</b><div class="on">(2) ${esc(x.set.two.desc)}</div><div class="${x.n >= 3 ? 'on' : ''}">(3) ${esc(x.set.three.desc)}</div></div>`).join('')}` : ''}`;
+        })()}
         <div class="section-title">Equipped gear</div>
         <div class="list">${SLOTS.map((sl) => {
           const it = eq[sl];
@@ -456,6 +491,10 @@ export const HubUI = {
       if (act.startsWith('tab-')) return rerender(act.slice(4), filter, sort, false);
       if (act.startsWith('f-')) return rerender(tab, act.slice(2), sort);
       if (act === 'sort') return rerender(tab, filter, sort === 'rarity' ? 'stars' : sort === 'stars' ? 'slot' : 'rarity');
+      if (act === 'pets') {
+        sh.remove();
+        return this.familiars();
+      }
       if (act === 'pickslot') return rerender('inventory', category(t.dataset.slot as Slot) === 'accessory' ? 'accessory' : t.dataset.slot === 'weapon' ? 'weapon' : 'armor', sort, false);
       if (act === 'open') {
         const g = stacks(s).find((x) => x.key === t.dataset.key);
@@ -652,7 +691,15 @@ export const HubUI = {
       <div class="hpbar" style="height:8px;margin:5px 0 2px"><div class="fill" style="width:${(o.progress / o.def.goal) * 100}%;background:linear-gradient(180deg,#9fe8b0,#2a8a5a)"></div></div>
       <div class="d">${o.progress} / ${o.def.goal} · Reward: ${o.def.reward.shards ? o.def.reward.shards + ' shards' : o.def.reward.gold + ' gold'}</div></div>
       ${o.claimed ? '<span class="muted head" style="font-size:12px">Claimed</span>' : `<button class="btn small gold ${o.done ? '' : 'disabled'}" data-act="claim" data-k="${o.def.id}">Claim</button>`}</div>`;
-    const body = tab === 'objectives'
+    const achState = achievementState();
+    void achState;
+    const body = tab === 'achievements'
+      ? `<div class="flavor">${s.achievements.length} / ${ACHIEVEMENTS.length} unlocked. Rewards are granted automatically.</div>
+        <div class="list">${ACHIEVEMENTS.map((a) => {
+          const done = s.achievements.includes(a.id);
+          return `<div class="li panel ${done ? 'ach-done' : 'locked'}">${icon(done ? 'star' : 'eye', 'md')}<div class="grow"><div class="t">${esc(a.name)}</div><div class="d">${esc(a.desc)}</div><div class="d gold-text">${esc(rewardText(a))}</div></div>${done ? '<span class="good head" style="font-size:12px">✓</span>' : ''}</div>`;
+        }).join('')}</div>`
+      : tab === 'objectives'
       ? `<div class="flavor">New daily goals every day and weekly goals every week, tracked across all modes. Missing a day costs nothing.</div>
         <div class="section-title">Today</div><div class="list">${ob.daily.map(objRow).join('')}</div>
         <div class="section-title">This week</div><div class="list">${ob.weekly.map(objRow).join('')}</div>`
@@ -681,7 +728,7 @@ export const HubUI = {
         <div class="section-title">Bosses defeated</div>
         <div class="list">${BOSSES.map((b) => `<div class="li panel"><div class="grow"><div class="t">${s.codex.bosses[b.id] ? b.name : '???'}</div><div class="d">${BIOMES[b.biome].name}</div></div><b>${s.codex.bosses[b.id] ?? 0}×</b></div>`).join('')}</div>`;
     const unc = unclaimedCount();
-    const sh = sheet('Adventurer Guild', 'b_guild', body, '', tabBtns([['objectives', `Objectives${unc ? ' •' + unc : ''}`], ['talents', 'Talents'], ['records', 'Records']], tab));
+    const sh = sheet('Adventurer Guild', 'b_guild', body, '', tabBtns([['objectives', `Objectives${unc ? ' •' + unc : ''}`], ['achievements', 'Achievements'], ['talents', 'Talents'], ['records', 'Records']], tab));
     onAct(sh, (act, t) => {
       if (act === 'close') return closeSheet(sh);
       if (act.startsWith('tab-')) {
@@ -791,6 +838,68 @@ export const HubUI = {
     });
   },
 
+  tipBox(html: string) {
+    const b = el(`<div class="screen clear-bg" style="z-index:85"><div class="spacer"></div><div class="panel" style="padding:16px;max-width:340px;width:100%;line-height:1.4">${html}<button class="btn block" data-act="ok" style="margin-top:10px">OK</button></div><div class="spacer"></div></div>`);
+    uiRoot().appendChild(b);
+    onAct(b, () => b.remove());
+  },
+
+  // ───────────────────────── Familiars ─────────────────────────
+  familiars() {
+    const s = App.save;
+    const body = `<div class="flavor">Familiars follow you into the rift and help on their own. Duplicates level them up (max ${PET_MAX}). Hatch eggs at the Merchant’s Chests tab, or earn familiars from achievements.</div>
+      <div class="list">${PETS.map((p) => {
+        const own = s.pets[p.id];
+        const lvl = own?.lvl ?? 0;
+        const need = petCost(lvl);
+        const canUp = lvl > 0 && lvl < PET_MAX && (own?.copies ?? 0) >= need;
+        const tint = '#' + p.tint.toString(16).padStart(6, '0');
+        return `<div class="li panel pet-row ${lvl ? '' : 'locked'} ${s.pet === p.id ? 'sel' : ''}" style="--pc:${tint}">
+          <img src="${tintedUrl(p.tex + '_0', p.tint)}" class="pet-img" style="filter:drop-shadow(0 0 6px ${tint}) ${lvl ? '' : 'grayscale(1) brightness(.5)'}">
+          <div class="grow"><div class="t" style="color:${RARITY[p.rarity].color}">${p.name} ${lvl ? `<span class="gold-text">Lv ${lvl}</span>` : ''}</div>
+            <div class="d">${RARITY[p.rarity].name} · ${esc(p.desc(Math.max(1, lvl)))}</div>
+            ${lvl ? `<div class="d">Copies: ${own!.copies}${lvl < PET_MAX ? ` / ${need} for Lv ${lvl + 1}` : ' · max level'}</div>` : '<div class="d muted">Not yet hatched</div>'}</div>
+          <div class="col" style="gap:4px">${lvl ? (s.pet === p.id ? '<span class="chip">Active</span>' : `<button class="btn small primary" data-act="use-${p.id}">Use</button>`) : ''}
+            ${canUp ? `<button class="btn small gold" data-act="up-${p.id}">Level up</button>` : ''}</div></div>`;
+      }).join('')}</div>`;
+    const sh = sheet('Familiars', 'el_light', body);
+    onAct(sh, (act) => {
+      if (act === 'close') {
+        sh.remove();
+        return this.hall('equipped');
+      }
+      if (act.startsWith('use-')) s.pet = act.slice(4);
+      if (act.startsWith('up-')) {
+        const p = s.pets[act.slice(3)];
+        const need = petCost(p.lvl);
+        if (p.copies < need || p.lvl >= PET_MAX) return;
+        p.copies -= need;
+        p.lvl++;
+        audio.play('legendary');
+      } else audio.play('ui');
+      App.persist();
+      this.achievementPopup();
+      sh.remove();
+      this.familiars();
+    });
+  },
+
+  /** Show any newly unlocked achievements as a celebratory popup. */
+  achievementPopup() {
+    const fresh = checkAchievements();
+    if (!fresh.length) return;
+    const p = el(`<div class="screen clear-bg ach-pop" style="z-index:85"><div class="spacer"></div><div class="panel" style="padding:18px;max-width:380px;width:100%">
+      <div class="center">${icon('star', 'xl')}</div><h2 class="center gold-text" style="font-size:20px">Achievement${fresh.length > 1 ? 's' : ''} unlocked!</h2>
+      <div class="list">${fresh.map((a) => `<div class="li panel"><div class="grow"><div class="t">${esc(a.name)}</div><div class="d">${esc(a.desc)}</div><div class="d gold-text">${esc(rewardText(a))}</div></div></div>`).join('')}</div>
+      <button class="btn primary block" data-act="ok" style="margin-top:10px">Great!</button></div><div class="spacer"></div></div>`);
+    uiRoot().appendChild(p);
+    audio.play('legendary');
+    onAct(p, () => {
+      p.remove();
+      this.refresh();
+    });
+  },
+
   // ───────────────────────── Chests ─────────────────────────
   chests() {
     const s = App.save;
@@ -807,7 +916,11 @@ export const HubUI = {
     const body = `<div class="flavor">"Sealed crates straight from the rift. What’s inside? That’s the fun part." — Odalie</div>
       <div class="panel pity"><b>Vault collection:</b> 22 weapons and armor pieces found <b>only</b> in chests (later craftable at the Blacksmith once discovered).
         <div style="margin-top:6px">Rift & Astral chests: guaranteed <b style="color:${RARITY[3].color}">Legendary or better</b> within <b>${left}</b> more chest${left === 1 ? '' : 's'}.</div></div>
-      <div class="list" style="margin-top:10px">${CHESTS.map((c) => `<div class="panel chest-card" style="--cc:${c.color}">
+      <div class="list" style="margin-top:10px"><div class="panel chest-card" style="--cc:#5affb0">
+        <div class="row"><img class="chest-img" src="${spriteUrl('owl_0')}" style="width:52px;height:48px" alt=""><div class="grow"><div class="t" style="color:#5affb0">${EGG.name}</div><div class="d">Hatches a familiar. Duplicates level them up.</div></div></div>
+        <div class="odds">${EGG.odds.map((o, i) => `<span style="color:${RARITY[i + 1].color}">${names[i + 1]} <b>${o}%</b></span>`).join('')}</div>
+        <div class="row" style="margin-top:8px"><button class="btn grow ${s.shards >= EGG.cost.shards ? 'gold' : 'disabled'}" data-act="egg">Hatch · ${EGG.cost.shards} ${icon('shard', 'sm')}</button></div>
+      </div>${CHESTS.map((c) => `<div class="panel chest-card" style="--cc:${c.color}">
         <div class="row"><img class="chest-img" src="${spriteUrl(c.sprite + '_0')}" alt=""><div class="grow"><div class="t" style="color:${c.color}">${c.name}</div><div class="d">${c.desc}</div></div></div>
         <div class="odds">${c.odds.map((o, i) => (o ? `<span style="color:${RARITY[i].color}">${names[i]} <b>${o}%</b></span>` : '')).join('')}</div>
         <div class="row" style="margin-top:8px"><button class="btn grow ${can(c, 1) ? 'gold' : 'disabled'}" data-act="open-${c.id}-1">Open · ${price(c, 1)}</button><button class="btn grow ${can(c, MULTI) ? 'primary' : 'disabled'}" data-act="open-${c.id}-${MULTI}">×${MULTI} · ${price(c, MULTI)}</button></div>
@@ -819,6 +932,33 @@ export const HubUI = {
       if (act === 'tab-wares') {
         sh.remove();
         return this.merchant();
+      }
+      if (act === 'egg') {
+        if (s.shards < EGG.cost.shards) return;
+        s.shards -= EGG.cost.shards;
+        s.chests.opened++;
+        const r = weighted([1, 2, 3, 4] as const, (x) => EGG.odds[x - 1]);
+        const pool = PETS.filter((p) => p.rarity === r);
+        const pet = pool[Math.floor(Math.random() * pool.length)];
+        const had = (s.pets[pet.id]?.lvl ?? 0) > 0;
+        grantPet(pet.id);
+        App.persist();
+        audio.play(r >= 3 ? 'legendary' : 'blessing');
+        const tint = '#' + pet.tint.toString(16).padStart(6, '0');
+        const scr = el(`<div class="screen chest-open lit" style="z-index:70;--glow:${RARITY[r].glow}"><div class="spacer"></div>
+          <div class="chest-stage"><div class="beams" style="--glow:${RARITY[r].glow}"></div><img class="chest-big pop" src="${tintedUrl(pet.tex + '_0', pet.tint)}" style="width:120px;height:112px;filter:drop-shadow(0 0 18px ${tint})"></div>
+          <div class="screen-title" style="color:${RARITY[r].color}">${pet.name}</div>
+          <div class="screen-sub">${RARITY[r].name} familiar · ${had ? `<b class="gold-text">Duplicate — +1 copy toward leveling</b>` : '<b class="good">New familiar!</b>'}<br>${esc(pet.desc(s.pets[pet.id].lvl))}</div>
+          <div class="spacer"></div><button class="btn primary" data-act="done" style="min-width:200px">Collect</button></div>`);
+        uiRoot().appendChild(scr);
+        await new Promise<void>((res) => onAct(scr, () => {
+          scr.remove();
+          res();
+        }));
+        sh.remove();
+        this.chests();
+        this.achievementPopup();
+        return;
       }
       if (act.startsWith('open-')) {
         const [, id, n] = act.split('-');
@@ -839,6 +979,7 @@ export const HubUI = {
         await this.chestReveal(c, res.items);
         sh.remove();
         this.chests();
+        this.achievementPopup();
       }
     });
   },
@@ -1098,6 +1239,34 @@ function spriteUrl(key: string): string {
   const src = tex.getSourceImage() as HTMLCanvasElement;
   u = src.toDataURL ? src.toDataURL() : '';
   spriteCache.set(key, u);
+  return u;
+}
+
+/** Sprite multiplied by a tint (matches Phaser setTint) for familiar previews. */
+/** Hero sprite key honoring the chosen (owned) skin. */
+function heroKey(cls: string): string {
+  const sk = App.save.skin[cls];
+  return sk && App.save.ownedSkins.includes(sk) ? `pl_${cls}_${sk}_0` : `pl_${cls}_0`;
+}
+
+function tintedUrl(key: string, tint: number): string {
+  const ck = key + '#' + tint;
+  let u = spriteCache.get(ck);
+  if (u) return u;
+  if (!App.game?.textures.exists(key)) return '';
+  const src = App.game.textures.get(key).getSourceImage() as HTMLCanvasElement;
+  const cv = document.createElement('canvas');
+  cv.width = src.width;
+  cv.height = src.height;
+  const g = cv.getContext('2d')!;
+  g.drawImage(src, 0, 0);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = '#' + tint.toString(16).padStart(6, '0');
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.globalCompositeOperation = 'destination-in';
+  g.drawImage(src, 0, 0);
+  u = cv.toDataURL();
+  spriteCache.set(ck, u);
   return u;
 }
 

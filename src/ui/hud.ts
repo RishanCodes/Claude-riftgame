@@ -324,6 +324,17 @@ export class Hud {
     setTimeout(() => t.remove(), 2300);
   }
 
+  /** A persistent centered timer line (empty string hides it). */
+  toastTimer(text: string) {
+    let t = this.root.querySelector<HTMLElement>('.timer-line');
+    if (!t) {
+      t = el('<div class="timer-line"></div>');
+      this.root.appendChild(t);
+    }
+    t.textContent = text;
+    t.style.display = text ? '' : 'none';
+  }
+
   flashDamage() {
     const v = document.getElementById('vignette')!;
     v.classList.remove('hurt');

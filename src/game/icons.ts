@@ -312,6 +312,8 @@ D.r_event = (pc) => {
   pc.ball(6, 6, 5, 5, '#a25cff', '#e0b0ff', '#4a1a8a');
   pc.rect(5, 2, 2, 1, '#ffffff'); pc.px(7, 3, '#ffffff'); pc.px(7, 4, '#ffffff'); pc.px(6, 5, '#ffffff'); pc.px(6, 6, '#ffffff'); pc.px(6, 8, '#ffffff');
 };
+D.r_anvil = (pc) => D.b_smith(pc);
+D.r_rtrial = (pc) => D.crit(pc);
 D.r_boss = (pc) => {
   pc.ball(6, 6, 5.5, 5, '#8a1a2a', '#d04a4a', '#3a0a10');
   pc.line(1, 4, 0, 0, '#f0e0c0'); pc.line(10, 4, 11, 0, '#f0e0c0');

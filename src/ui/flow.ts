@@ -9,6 +9,7 @@ import { TRIALS, dailyFor, masteryLevel, SPEC_LEVEL, ROMAN, type ModeId } from '
 import { getClass } from '../data/classes';
 import { discoverItem } from './itemview';
 import { track } from '../game/objectives';
+import { checkAchievements, rewardText } from '../game/achievements';
 
 type RunOpts = { mode?: ModeId; act?: number; modifiers?: string[]; trialId?: string };
 let lastOpts: RunOpts = {};
@@ -93,6 +94,8 @@ export function makeFlow(hud: Hud, tips: Tips, hub: typeof HubUIType) {
       save.stats.totalKills += sum.kills;
       save.stats.bestAct = Math.max(save.stats.bestAct, run.act + 1);
       save.stats.homecomings++;
+      save.stats.perfects += run.perfects;
+      save.stats.finishers += run.finishers;
       if (save.stats.homecomings >= 3 && !save.codex.lore.includes('l_village')) save.codex.lore.push('l_village');
       let unlockedTier = 0;
       const extras: string[] = [];
@@ -147,6 +150,7 @@ export function makeFlow(hud: Hud, tips: Tips, hub: typeof HubUIType) {
       const newM = masteryLevel(save.mastery[save.selectedClass]).level;
       if (newM > prevM) extras.push(`${getClass(save.selectedClass).name} mastery level ${newM}! (+2% damage and HP per level)${newM >= SPEC_LEVEL && prevM < SPEC_LEVEL ? ' — specialization unlocked in the Hero Hall' : ''}`);
       track('runs');
+      for (const a of checkAchievements()) extras.push(`🏆 Achievement: ${a.name} (${rewardText(a)})`);
       App.persist();
       const newLvl = renownLevel(save.renown).level;
 

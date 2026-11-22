@@ -1,4 +1,5 @@
 // Procedural pixel-art sprite definitions for characters, enemies, bosses, projectiles and props.
+import { SKINS } from '../data/extras';
 import { PixelCanvas } from './pixel';
 
 export type SpriteFactory = () => HTMLCanvasElement;
@@ -874,4 +875,37 @@ for (const [key, body, light, trim, glow] of [['chestw', '#7a4a26', '#a86a3a', '
       return pc.outline();
     });
   }
+}
+
+// Hero skins: palette swaps of each hero
+for (const sk of SKINS) {
+  const h = HEROES[sk.cls];
+  for (let f = 0; f < 4; f++) {
+    def(`pl_${sk.cls}_${sk.id}_${f}`, () => {
+      const pc = new PixelCanvas(14, 16);
+      pc.map(0, 0, [...h.top, ...LEGS2[f]], { ...h.pal, ...sk.pal });
+      return pc.outline();
+    });
+  }
+}
+// Familiar sprites (white-ish, tinted per familiar)
+for (let f = 0; f < 2; f++) {
+  def('owl_' + f, () => {
+    const pc = new PixelCanvas(14, 13);
+    const w = f ? 1 : 0;
+    pc.ellipse(2, 6 + w, 2, 3, '#c8c8c8'); pc.ellipse(11, 6 + w, 2, 3, '#c8c8c8');
+    pc.ball(7, 7, 4.5, 5, '#e8e8e8', '#ffffff', '#a8a8a8');
+    pc.circle(5, 5, 1.6, '#ffffff'); pc.circle(9, 5, 1.6, '#ffffff'); pc.px(5, 5, '#101010'); pc.px(9, 5, '#101010');
+    pc.px(7, 7, '#ffcf5a'); pc.px(5, 1, '#c8c8c8'); pc.px(9, 1, '#c8c8c8');
+    return pc.outline('#101418');
+  });
+  def('turtle_' + f, () => {
+    const pc = new PixelCanvas(16, 11);
+    const l = f ? 1 : 0;
+    pc.rect(3 + l, 8, 2, 3, '#a0a0a0'); pc.rect(10 - l, 8, 2, 3, '#a0a0a0');
+    pc.ball(7, 5, 6, 4, '#d8d8d8', '#ffffff', '#909090');
+    pc.line(4, 3, 10, 3, '#b0b0b0'); pc.line(7, 1, 7, 8, '#b0b0b0');
+    pc.ball(13, 6, 2, 2, '#c8c8c8', '#ffffff', '#909090'); pc.px(14, 5, '#101010');
+    return pc.outline('#101418');
+  });
 }

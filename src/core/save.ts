@@ -33,7 +33,14 @@ export interface SaveData {
     totalKills: number;
     bestTimeVictory: number;
     homecomings: number;
+    perfects: number;
+    finishers: number;
   };
+  achievements: string[];
+  skin: Record<string, string>;
+  ownedSkins: string[];
+  pets: Record<string, { lvl: number; copies: number }>;
+  pet: string;
   tutorial: Record<string, boolean>;
   settings: { sfx: number; music: number; shake: boolean; damageNumbers: boolean; haptics: boolean; effects: 'high' | 'low'; textScale: number; flashes: boolean };
   tier: number;
@@ -65,7 +72,12 @@ function defaults(): SaveData {
     inventory: [starter],
     equipped,
     codex: { enemies: {}, bosses: {}, reactions: [], powers: [], bases: [starter.base], lore: [] },
-    stats: { runs: 0, victories: 0, deaths: 0, bestAct: 0, totalKills: 0, bestTimeVictory: 0, homecomings: 0 },
+    stats: { runs: 0, victories: 0, deaths: 0, bestAct: 0, totalKills: 0, bestTimeVictory: 0, homecomings: 0, perfects: 0, finishers: 0 },
+    achievements: [],
+    skin: {},
+    ownedSkins: [],
+    pets: {},
+    pet: '',
     tutorial: {},
     settings: { sfx: 0.7, music: 0.4, shake: true, damageNumbers: true, haptics: true, effects: 'high', textScale: 1, flashes: true },
     tier: 1,

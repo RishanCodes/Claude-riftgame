@@ -2,6 +2,7 @@ import type { Item } from '../core/types';
 import { RARITY, getBase, getPower, itemMainMods, formatMod, starsOf, rankMods, weaponProps } from '../data/items';
 import { propsText } from '../data/gear';
 import { getClass } from '../data/classes';
+import { setOf } from '../data/extras';
 import { icon } from '../game/icons';
 import { esc } from './dom';
 import { App } from '../app';
@@ -44,7 +45,18 @@ export function itemDetailsHTML(it: Item, showArt = true): string {
     <div class="iname" style="color:${r.color}">${esc(it.name)}${it.level ? ` +${it.level}` : ''}</div>
     <div class="irar" style="color:${r.color}">${r.name} ${SLOT_NAMES[it.slot]} <span class="starrow">${starStr(starsOf(it))}</span></div>
     ${clsLine}${b.desc ? `<div class="idesc">${esc(b.desc)}</div>` : ''}
-    <ul>${main}${aff}${rk}${props}${grant}${pw}</ul>`;
+    <ul>${main}${aff}${rk}${props}${grant}${pw}</ul>${setHTML(it.base)}`;
+}
+
+/** Gear-set membership with live piece count and bonuses. */
+export function setHTML(base: string): string {
+  const set = setOf(base);
+  if (!set) return '';
+  const eqBases = new Set(Object.values(App.save.equipped).map((id) => App.save.inventory.find((i) => i.id === id)?.base));
+  const n = set.pieces.filter((b) => eqBases.has(b)).length;
+  const names = set.pieces.map((b) => `<span style="color:${eqBases.has(b) ? set.color : 'var(--dim)'}">${esc(getBase(b).name)}</span>`).join(' · ');
+  return `<div class="setbox" style="--sc:${set.color}"><b>${esc(set.name)} set (${n}/3)</b><div class="setp">${names}</div>
+    <div class="${n >= 2 ? 'on' : ''}">(2) ${esc(set.two.desc)}</div><div class="${n >= 3 ? 'on' : ''}">(3) ${esc(set.three.desc)}</div></div>`;
 }
 
 /** Power score delta if the item replaced what's equipped in its slot. */

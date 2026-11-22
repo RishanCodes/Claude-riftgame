@@ -16,6 +16,8 @@ import { selectClass } from './core/save';
 import { generateItem } from './data/items';
 import { RunState } from './game/run';
 import { CHESTS, openChest } from './data/chests';
+import { SETS } from './data/extras';
+import { computeStats } from './game/stats';
 
 const host = document.getElementById('game')!;
 const appEl = document.getElementById('app')!;
@@ -98,4 +100,4 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
 // Debug handle (used by automated play-tests; harmless in production).
-(window as unknown as { __riftbound: unknown }).__riftbound = { App, UI, Input, selectClass, generateItem, RunState, audio, CHESTS, openChest };
+(window as unknown as { __riftbound: unknown }).__riftbound = { App, UI, Input, selectClass, generateItem, RunState, audio, CHESTS, openChest, SETS, computeStats };

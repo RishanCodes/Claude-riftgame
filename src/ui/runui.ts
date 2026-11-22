@@ -398,6 +398,53 @@ export const RunUI = {
     });
   },
 
+  /** Rift Anvil: raise one owned blessing by a level (or gain a new one). */
+  anvil(scene: RunScene): Promise<void> {
+    const run = scene.run;
+    const owned = Object.entries(run.blessings)
+      .map(([id, l]) => ({ b: getBlessing(id), l }))
+      .filter((x) => x.l < x.b.maxLevel);
+    if (!owned.length) return RunUI.chooseBlessing(scene, true);
+    const offers = owned.sort(() => Math.random() - 0.5).slice(0, 3);
+    return new Promise((resolve) => {
+      const s = openScreen(`<div class="spacer"></div>
+        <div class="screen-title" style="text-shadow:0 0 20px rgba(255,176,74,.6),0 2px 0 #000">Rift Anvil</div>
+        <div class="screen-sub">Temper one of your blessings — it gains a level immediately.</div>
+        <div class="cards">${offers.map((o, i) => blessingCard(o.b, o.l, i)).join('')}</div>
+        <div style="height:12px"></div><button class="btn small ghost" data-act="skip">Leave it</button><div class="spacer"></div>`);
+      audio.play('chest');
+      let done = false;
+      onAct(s, (act, t) => {
+        if (done) return;
+        done = true;
+        if (act === 'pick') {
+          const o = offers[Number(t.dataset.i)];
+          t.classList.add('picked');
+          run.addBlessing(o.b.id);
+          audio.play('blessing');
+          setTimeout(() => closeScreen(s).then(resolve), 380);
+        } else void closeScreen(s).then(resolve);
+      });
+    });
+  },
+
+  /** Rift Trial room: optional challenge. Resolves true if accepted. */
+  trialOffer(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const s = openScreen(`<div class="spacer"></div><div class="panel" style="padding:18px;max-width:380px;width:100%">
+        <div class="center">${icon('crit', 'xl')}</div>
+        <h2 class="center" style="font-size:22px;margin:6px 0">Rift Trial</h2>
+        <p class="center" style="line-height:1.4">Survive <b>25 seconds</b> of escalating enemy waves.</p>
+        <p class="center gold-text" style="font-size:14px">Reward: an <b>Epic or better</b> item and 3 Rift Shards.</p>
+        <div class="col"><button class="btn primary block" data-act="yes">Accept the trial</button><button class="btn block" data-act="no">Not now</button></div>
+      </div><div class="spacer"></div>`);
+      onAct(s, (act) => {
+        audio.play(act === 'yes' ? 'ui' : 'uiBack');
+        void closeScreen(s).then(() => resolve(act === 'yes'));
+      });
+    });
+  },
+
   actTransition(act: number) {
     const b = BIOMES[act];
     const s = openScreen(`<div class="spacer"></div><div class="screen-title" style="font-size:32px">${App.run?.mode === 'bossrush' ? 'Next Guardian' : 'Act ' + ROMAN[act]}</div><div class="screen-sub">${esc(b.name)}<br>${esc(b.subtitle)}</div><div class="spacer"></div>`);

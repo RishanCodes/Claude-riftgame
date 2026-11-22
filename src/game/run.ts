@@ -23,7 +23,7 @@ export function generateActMap(act: number): ActMap {
       if (L === 0) type = 'start';
       else if (L === LAYERS_PER_ACT - 1) type = 'boss';
       else {
-        type = weighted<RoomType>(['combat', 'elite', 'treasure', 'shrine', 'event', 'merchant'], (t) => {
+        type = weighted<RoomType>(['combat', 'elite', 'treasure', 'shrine', 'event', 'merchant', 'anvil', 'rtrial'], (t) => {
           switch (t) {
             case 'combat': return 46;
             case 'elite': return L >= 2 ? 16 : 0;
@@ -31,6 +31,8 @@ export function generateActMap(act: number): ActMap {
             case 'shrine': return L >= 2 ? 11 : 4;
             case 'event': return 12;
             case 'merchant': return L >= 2 ? 8 : 0;
+            case 'anvil': return L >= 2 ? 7 : 0;
+            case 'rtrial': return L >= 1 ? 7 : 0;
             default: return 0;
           }
         });

@@ -23,7 +23,8 @@ export interface EnemyStatus {
   poisonDps: number;
 }
 
-export type EliteAffix = 'swift' | 'armored' | 'enraged';
+export type EliteAffix = 'swift' | 'armored' | 'enraged' | 'vampiric' | 'splitting' | 'warded' | 'volatile';
+const AFFIX_NAME: Record<EliteAffix, string> = { swift: 'Swift', armored: 'Armored', enraged: 'Enraged', vampiric: 'Vampiric', splitting: 'Splitting', warded: 'Warded', volatile: 'Volatile' };
 
 export class Enemy {
   scene: RunScene;
@@ -113,7 +114,7 @@ export class Enemy {
     this.shadow.setScale((this.r * 2.2) / 16, 1.9);
     if (affix === 'swift') this.speed *= 1.4;
     if (affix === 'armored') this.armor = Math.min(0.6, this.armor + 0.3);
-    this.name = `${affix === 'swift' ? 'Swift' : affix === 'armored' ? 'Armored' : 'Enraged'} ${this.def.name}`;
+    this.name = `${AFFIX_NAME[affix]} ${this.def.name}`;
   }
 
   makeChampion() {
@@ -157,6 +158,13 @@ export class Enemy {
       this.sprite.setAlpha(1 - Math.max(0, this.spawnT) / 0.4);
     }
     this.updateStatus(dt);
+    if (this.elite === 'warded') {
+      this.data.wardT = (this.data.wardT ?? 3) - dt;
+      if (this.data.wardT <= 0) {
+        this.data.wardT = 6;
+        this.shielded = 2;
+      }
+    }
 
     if (!this.disabled) {
       this.ai(dt * this.rate);

@@ -79,6 +79,15 @@ Design decisions:
 - **Procedural art with a shared outline pass**, so everything (characters, enemies, bosses,
   props, UI icons) has one cohesive pixel-art style without external assets.
 
+## Sets, Familiars, Skins & Achievements
+
+- **Gear sets (7)** — Ember Vestments, Nightstalker, Iron Bastion, Arcane Conclave, Spirit Warden, Vault Regalia, Starfall. Equip 2 or 3 pieces for stacking bonuses (stats plus a granted power at 3). Item details show set progress; the Equipment Hall lists active bonuses.
+- **Familiars (8)** — Ember Sprite, Gilded Imp, Mending Wisp, Frost Owl, Storm Ferret, Shell Tortoise, Shade Cat, Rift Moth. Each follows you and acts on its own (fire bolts, coin magnet, heals, chill pulses, chain lightning, passive stats). Hatch a **Familiar Egg** (30 shards, Merchant → Chests); duplicates level familiars to Lv 5. Manage them from the Equipment Hall.
+- **Hero skins (12)** — two palette swaps per hero, unlocked by achievements and picked in the Hero Hall.
+- **Achievements (28)** — Guild → Achievements. Rewards (shards, gold, skins, familiars) are granted automatically, with an unlock popup.
+- **New rooms** — *Rift Anvil* (level up a blessing you own) and *Rift Trial* (optional 25 s survival challenge for an Epic+ item and 3 shards).
+- **New elite affixes** — Vampiric, Splitting, Warded, Volatile.
+
 ## Merchant Chests & the Vault collection
 
 - **Chests** (Merchant → Chests tab): Wooden (200 gold: 60% Common / 32% Rare / 7% Epic / 1% Legendary),
